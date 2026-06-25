@@ -92,6 +92,13 @@ enum RateCardKind {
   DRIVER
 }
 
+// The quantity a rate band tiers on.
+enum RateBandType {
+  DISTANCE // miles
+  DROP // number of delivery drops
+  PIECE // number of pieces
+}
+
 enum Role {
   ADMIN
   OPERATOR
@@ -364,8 +371,17 @@ model RateCard {
   dayType     DayType      @default(ANY)
   timeBand    TimeBand     @default(ANY)
 
+  // Simple model (fallback / "single rate over the distance"): £ per mile.
   ratePerMile   Float
   minimumCharge Float @default(0)
+
+  // Banded model: when DISTANCE bands exist they replace ratePerMile; DROP and
+  // PIECE bands add per-drop / per-piece charges. See src/lib/pricing.ts.
+  bands RateBand[]
+
+  // Extras
+  waitingPerHour Float @default(0) // informational; applied to recorded wait
+  retailPct      Float @default(0) // uplift applied to the computed charge
 
   effectiveFrom DateTime  @default(now())
   effectiveTo   DateTime? // null = open-ended
@@ -381,6 +397,21 @@ model RateCard {
   @@index([kind])
   @@index([customerId])
   @@index([driverId])
+}
+
+// A pricing tier within a rate card: for quantities in [minValue, maxValue],
+// charge `rate` per unit (per mile / per drop / per piece).
+model RateBand {
+  id         String       @id @default(cuid())
+  rateCardId String
+  type       RateBandType
+  minValue   Float
+  maxValue   Float
+  rate       Float
+
+  rateCard RateCard @relation(fields: [rateCardId], references: [id], onDelete: Cascade)
+
+  @@index([rateCardId])
 }
 
 // ---------------------------------------------------------------------------

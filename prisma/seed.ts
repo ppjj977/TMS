@@ -150,6 +150,28 @@ async function main() {
     data: { kind: "CUSTOMER", name: "Acme — Small van (contract)", customerId: acme.id, vehicleType: "SMALL_VAN", dayType: "WEEKDAY", timeBand: "DAYTIME", ratePerMile: 0.95, minimumCharge: 30, effectiveFrom },
   });
 
+  // Banded tariff demo: Bright LWB tiered £/mile + per-drop charge.
+  await prisma.rateCard.create({
+    data: {
+      kind: "CUSTOMER",
+      name: "Bright — LWB tiered",
+      customerId: brightLogistics.id,
+      vehicleType: "LWB_VAN",
+      dayType: "ANY",
+      timeBand: "ANY",
+      ratePerMile: 1.35,
+      minimumCharge: 45,
+      effectiveFrom,
+      bands: {
+        create: [
+          { type: "DISTANCE", minValue: 0, maxValue: 30, rate: 1.6 },
+          { type: "DISTANCE", minValue: 30.01, maxValue: 9999, rate: 1.2 },
+          { type: "DROP", minValue: 1, maxValue: 99, rate: 5 },
+        ],
+      },
+    },
+  });
+
   // Driver cost cards (what we pay drivers) by vehicle type.
   const driverDefaults: { name: string; vehicleType: any; ratePerMile: number; minimumCharge: number }[] = [
     { name: "Driver pay — Small van", vehicleType: "SMALL_VAN", ratePerMile: 0.65, minimumCharge: 20 },
@@ -193,6 +215,8 @@ async function main() {
       timeBand,
       serviceDate: args.serviceDate,
       distanceMiles: args.distanceMiles,
+      drops: args.stops.filter((s) => s.type === "DELIVERY").length,
+      pieces: args.pieces ?? 1,
       customerId: args.customerId,
       driverId: args.driverId,
     });

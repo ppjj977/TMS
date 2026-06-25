@@ -132,12 +132,16 @@ async function createJobCore(
     if (estimated > 0) distanceMiles = estimated;
   }
 
+  const dropCount = stops.filter((s) => s.type === StopType.DELIVERY).length;
+
   const pricing = await priceJob({
     vehicleType: data.vehicleType,
     dayType,
     timeBand,
     serviceDate,
     distanceMiles,
+    drops: dropCount,
+    pieces: data.pieces,
     customerId: data.customerId,
   });
 
@@ -212,13 +216,19 @@ export async function createPortalBooking(formData: FormData) {
 // ---------------------------------------------------------------------------
 
 async function recalc(jobId: string) {
-  const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+  const job = await prisma.job.findUniqueOrThrow({
+    where: { id: jobId },
+    include: { stops: true },
+  });
+  const dropCount = job.stops.filter((s) => s.type === StopType.DELIVERY).length;
   const pricing = await priceJob({
     vehicleType: job.vehicleType,
     dayType: job.dayType,
     timeBand: job.timeBand,
     serviceDate: job.serviceDate,
     distanceMiles: job.distanceMiles,
+    drops: dropCount,
+    pieces: job.pieces,
     customerId: job.customerId,
     driverId: job.driverId,
   });

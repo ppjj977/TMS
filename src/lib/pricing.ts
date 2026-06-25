@@ -1,6 +1,7 @@
 import {
   DayType,
   Prisma,
+  RateBandType,
   RateCardKind,
   TimeBand,
   VehicleType,
@@ -14,6 +15,8 @@ export interface PriceInputs {
   timeBand: TimeBand;
   serviceDate: Date;
   distanceMiles: number;
+  drops?: number; // number of delivery drops
+  pieces?: number; // number of pieces
   customerId?: string | null;
   driverId?: string | null;
 }
@@ -25,16 +28,17 @@ export interface PriceResult {
   appliedMinimum: boolean;
   rateCardId: string;
   rateCardName: string;
+  breakdown: {
+    distance: number;
+    drops: number;
+    pieces: number;
+    retailUplift: number;
+  };
 }
 
-type RateCardRow = Prisma.RateCardGetPayload<{}>;
+// Rate card with its bands loaded.
+type RateCardRow = Prisma.RateCardGetPayload<{ include: { bands: true } }>;
 
-/**
- * Score how specific a rate card is for the given inputs. A higher score means
- * a closer match. Targeting a specific customer/driver is the strongest signal,
- * then vehicle type, then day type, then time band. We weight them so that a
- * more specific dimension can never be outranked by several vaguer matches.
- */
 function specificity(card: RateCardRow): number {
   let score = 0;
   if (card.customerId || card.driverId) score += 8;
@@ -48,8 +52,6 @@ function matches(card: RateCardRow, input: PriceInputs): boolean {
   if (card.kind !== input.kind) return false;
   if (!card.active) return false;
 
-  // Owner scope: a card targeting a specific customer/driver only applies to
-  // that entity; a card with no owner is a global default.
   if (input.kind === RateCardKind.CUSTOMER) {
     if (card.customerId && card.customerId !== input.customerId) return false;
   } else {
@@ -60,9 +62,6 @@ function matches(card: RateCardRow, input: PriceInputs): boolean {
   if (card.dayType !== "ANY" && card.dayType !== input.dayType) return false;
   if (card.timeBand !== "ANY" && card.timeBand !== input.timeBand) return false;
 
-  // Effective date window. Rate cards are dated, not timestamped: a card
-  // effective "from" a given day applies to the whole of that day onward, so
-  // we compare at day granularity rather than by exact timestamp.
   const serviceDay = startOfDay(input.serviceDate);
   if (startOfDay(card.effectiveFrom) > serviceDay) return false;
   if (card.effectiveTo && startOfDay(card.effectiveTo) < serviceDay) return false;
@@ -70,11 +69,6 @@ function matches(card: RateCardRow, input: PriceInputs): boolean {
   return true;
 }
 
-function startOfDay(d: Date): number {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
-/** Pick the best matching rate card, or null if none apply. */
 export async function selectRateCard(
   input: PriceInputs,
 ): Promise<RateCardRow | null> {
@@ -86,6 +80,7 @@ export async function selectRateCard(
         ? { OR: [{ customerId: input.customerId ?? undefined }, { customerId: null }] }
         : { OR: [{ driverId: input.driverId ?? undefined }, { driverId: null }] }),
     },
+    include: { bands: true },
   });
 
   const applicable = candidates.filter((c) => matches(c, input));
@@ -94,29 +89,65 @@ export async function selectRateCard(
   applicable.sort((a, b) => {
     const diff = specificity(b) - specificity(a);
     if (diff !== 0) return diff;
-    // Tie-break: most recently effective card wins.
     return b.effectiveFrom.getTime() - a.effectiveFrom.getTime();
   });
 
   return applicable[0];
 }
 
-/** Compute a price: max(distance * ratePerMile, minimumCharge). */
+// Find the per-unit rate for a quantity within a band type, or null if no band
+// covers it.
+function bandRate(card: RateCardRow, type: RateBandType, qty: number): number | null {
+  const band = card.bands
+    .filter((b) => b.type === type)
+    .find((b) => qty >= b.minValue && qty <= b.maxValue);
+  return band ? band.rate : null;
+}
+
+/**
+ * Compute a price.
+ *   distance charge = miles × (banded £/mile if a DISTANCE band matches, else ratePerMile)
+ *   drop charge     = drops × £/drop  (only if a DROP band matches)
+ *   piece charge    = pieces × £/piece (only if a PIECE band matches)
+ * subtotal is floored at minimumCharge, then a retail % uplift is applied.
+ */
 export async function price(input: PriceInputs): Promise<PriceResult | null> {
   const card = await selectRateCard(input);
   if (!card) return null;
 
-  const byDistance = round2(input.distanceMiles * card.ratePerMile);
-  const appliedMinimum = byDistance < card.minimumCharge;
-  const amount = appliedMinimum ? round2(card.minimumCharge) : byDistance;
+  const miles = input.distanceMiles;
+  const drops = input.drops ?? 0;
+  const pieces = input.pieces ?? 0;
+
+  const distRate = bandRate(card, RateBandType.DISTANCE, miles);
+  const distanceCharge = round2(miles * (distRate ?? card.ratePerMile));
+
+  const dropRate = bandRate(card, RateBandType.DROP, drops);
+  const dropCharge = dropRate != null ? round2(drops * dropRate) : 0;
+
+  const pieceRate = bandRate(card, RateBandType.PIECE, pieces);
+  const pieceCharge = pieceRate != null ? round2(pieces * pieceRate) : 0;
+
+  const subtotal = round2(distanceCharge + dropCharge + pieceCharge);
+  const appliedMinimum = subtotal < card.minimumCharge;
+  const floored = appliedMinimum ? round2(card.minimumCharge) : subtotal;
+
+  const retailUplift = card.retailPct ? round2(floored * (card.retailPct / 100)) : 0;
+  const amount = round2(floored + retailUplift);
 
   return {
     amount,
-    ratePerMile: card.ratePerMile,
+    ratePerMile: distRate ?? card.ratePerMile,
     minimumCharge: card.minimumCharge,
     appliedMinimum,
     rateCardId: card.id,
     rateCardName: card.name,
+    breakdown: {
+      distance: distanceCharge,
+      drops: dropCharge,
+      pieces: pieceCharge,
+      retailUplift,
+    },
   };
 }
 
@@ -129,36 +160,35 @@ export interface JobPricing {
   marginPct: number;
 }
 
-/** Price both the customer revenue and driver cost legs of a job. */
 export async function priceJob(args: {
   vehicleType: VehicleType;
   dayType: DayType;
   timeBand: TimeBand;
   serviceDate: Date;
   distanceMiles: number;
+  drops?: number;
+  pieces?: number;
   customerId: string;
   driverId?: string | null;
 }): Promise<JobPricing> {
-  const customer = await price({
-    kind: RateCardKind.CUSTOMER,
-    customerId: args.customerId,
+  const common = {
     vehicleType: args.vehicleType,
     dayType: args.dayType,
     timeBand: args.timeBand,
     serviceDate: args.serviceDate,
     distanceMiles: args.distanceMiles,
+    drops: args.drops,
+    pieces: args.pieces,
+  };
+
+  const customer = await price({
+    kind: RateCardKind.CUSTOMER,
+    customerId: args.customerId,
+    ...common,
   });
 
   const driver = args.driverId
-    ? await price({
-        kind: RateCardKind.DRIVER,
-        driverId: args.driverId,
-        vehicleType: args.vehicleType,
-        dayType: args.dayType,
-        timeBand: args.timeBand,
-        serviceDate: args.serviceDate,
-        distanceMiles: args.distanceMiles,
-      })
+    ? await price({ kind: RateCardKind.DRIVER, driverId: args.driverId, ...common })
     : null;
 
   const customerCharge = customer?.amount ?? 0;
@@ -176,7 +206,6 @@ export async function priceJob(args: {
   };
 }
 
-/** Classify a date into the day type used for rate-card matching. */
 export function classifyDay(date: Date): DayType {
   const day = date.getDay();
   if (day === 0) return DayType.SUNDAY;
@@ -184,10 +213,13 @@ export function classifyDay(date: Date): DayType {
   return DayType.WEEKDAY;
 }
 
-/** Classify a time into the band used for rate-card matching (08:00–18:00 = daytime). */
 export function classifyTimeBand(date: Date): TimeBand {
   const hour = date.getHours();
   return hour >= 8 && hour < 18 ? TimeBand.DAYTIME : TimeBand.OUT_OF_HOURS;
+}
+
+function startOfDay(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
 function round2(n: number): number {

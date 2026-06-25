@@ -13,7 +13,7 @@ export default async function EditRateCardPage({
 }) {
   const { id } = await params;
   const [card, customers, drivers] = await Promise.all([
-    prisma.rateCard.findUnique({ where: { id } }),
+    prisma.rateCard.findUnique({ where: { id }, include: { bands: true } }),
     prisma.customer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.driver.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);

@@ -20,6 +20,22 @@ interface Option {
   name: string;
 }
 
+interface BandRow {
+  key: number;
+  type: string;
+  minValue: number;
+  maxValue: number;
+  rate: number;
+}
+
+const bandTypeOptions = [
+  { value: "DISTANCE", label: "Distance (per mile)" },
+  { value: "DROP", label: "Drops (per drop)" },
+  { value: "PIECE", label: "Pieces (per piece)" },
+];
+
+let bandKey = 0;
+
 export function RateCardForm({
   action,
   card,
@@ -28,12 +44,24 @@ export function RateCardForm({
   defaults,
 }: {
   action: (formData: FormData) => void;
-  card?: RateCard;
+  card?: RateCard & {
+    bands?: { type: string; minValue: number; maxValue: number; rate: number }[];
+  };
   customers: Option[];
   drivers: Option[];
   defaults?: { kind?: string; customerId?: string; driverId?: string };
 }) {
   const [kind, setKind] = useState<string>(card?.kind ?? defaults?.kind ?? "CUSTOMER");
+  const [bands, setBands] = useState<BandRow[]>(
+    (card?.bands ?? []).map((b) => ({ key: bandKey++, ...b })),
+  );
+
+  function addBand() {
+    setBands((b) => [...b, { key: bandKey++, type: "DISTANCE", minValue: 0, maxValue: 9999, rate: 0 }]);
+  }
+  function removeBand(key: number) {
+    setBands((b) => b.filter((r) => r.key !== key));
+  }
 
   return (
     <form action={action} className="space-y-6">
@@ -112,6 +140,14 @@ export function RateCardForm({
           </Field>
           <div />
 
+          <Field label="Waiting per hour (£)">
+            <Input type="number" step="0.01" min="0" name="waitingPerHour" defaultValue={card?.waitingPerHour ?? 0} />
+          </Field>
+          <Field label="Retail uplift (%)" hint="Applied on top of the computed charge">
+            <Input type="number" step="0.1" min="0" name="retailPct" defaultValue={card?.retailPct ?? 0} />
+          </Field>
+          <div />
+
           <Field label="Effective from" required>
             <Input
               type="date"
@@ -129,6 +165,55 @@ export function RateCardForm({
           </label>
         </div>
       </Card>
+
+      <Card className="p-5">
+        <div className="mb-1 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900">Rate bands (optional)</h2>
+          <Button type="button" variant="secondary" onClick={addBand}>+ Add band</Button>
+        </div>
+        <p className="mb-4 text-sm text-slate-500">
+          Tiered pricing by quantity. A <strong>Distance</strong> band sets £/mile for miles in
+          its range (overrides the flat per-mile above). <strong>Drop</strong> and{" "}
+          <strong>Piece</strong> bands add a per-drop / per-piece charge. Leave empty to use the
+          simple per-mile rate.
+        </p>
+
+        {bands.length === 0 ? (
+          <p className="text-sm text-slate-400">No bands — using flat per-mile pricing.</p>
+        ) : (
+          <div className="space-y-2">
+            <div className="grid grid-cols-12 gap-2 px-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <span className="col-span-4">Type</span>
+              <span className="col-span-2">Min</span>
+              <span className="col-span-2">Max</span>
+              <span className="col-span-3">Rate (£/unit)</span>
+              <span className="col-span-1" />
+            </div>
+            {bands.map((b) => (
+              <div key={b.key} className="grid grid-cols-12 items-center gap-2">
+                <div className="col-span-4">
+                  <Select
+                    name="band_type"
+                    defaultValue={b.type}
+                    options={bandTypeOptions}
+                  />
+                </div>
+                <Input className="col-span-2" type="number" step="0.1" name="band_min" defaultValue={b.minValue} />
+                <Input className="col-span-2" type="number" step="0.1" name="band_max" defaultValue={b.maxValue} />
+                <Input className="col-span-3" type="number" step="0.01" name="band_rate" defaultValue={b.rate} />
+                <button
+                  type="button"
+                  onClick={() => removeBand(b.key)}
+                  className="col-span-1 text-xs font-medium text-red-600 hover:underline"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       <div className="flex justify-end">
         <Button type="submit">{card ? "Save changes" : "Create rate card"}</Button>
       </div>
