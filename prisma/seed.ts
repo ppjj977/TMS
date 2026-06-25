@@ -185,6 +185,20 @@ async function main() {
     await prisma.rateCard.create({ data: { kind: "DRIVER", dayType: "ANY", timeBand: "ANY", effectiveFrom, ...c } });
   }
 
+  // Approx coordinates for demo postcodes so the live map has data without
+  // needing the geocoding API at seed time.
+  const COORDS: Record<string, [number, number]> = {
+    "M17 1AB": [53.4673, -2.3275],
+    "BL1 4RT": [53.5853, -2.4329],
+    "OL11 2HX": [53.6205, -2.1611],
+    "LS12 2AA": [53.7905, -1.5839],
+    "YO30 4XG": [53.9897, -1.1009],
+    "S9 3QS": [53.4012, -1.4203],
+    "DE1 2QN": [52.9226, -1.4746],
+    "NG1 6HS": [52.9536, -1.1525],
+    "SK4 1AR": [53.4106, -2.1576],
+  };
+
   // --- Jobs (bookings) --------------------------------------------------
   const today = new Date();
   function at(hour: number, dayOffset = 0): Date {
@@ -253,6 +267,8 @@ async function main() {
             city: s.city,
             postcode: s.postcode,
             contactName: s.contactName,
+            latitude: COORDS[s.postcode]?.[0] ?? null,
+            longitude: COORDS[s.postcode]?.[1] ?? null,
           })),
         },
       },
