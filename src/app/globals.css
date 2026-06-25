@@ -2,12 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg: #f6f7fb;
+}
+
 html,
 body {
   height: 100%;
 }
 
 body {
-  background-color: #f8fafc;
-  color: #111827;
+  background-color: var(--bg);
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv05", "ss01";
+}
+
+/* Tabular numbers for money/metrics columns. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle, premium scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::selection {
+  background-color: rgb(79 70 229 / 0.18);
 }

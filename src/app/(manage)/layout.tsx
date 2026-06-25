@@ -17,13 +17,15 @@ export default async function ManageLayout({
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-56 shrink-0 border-r border-gray-200 bg-white md:block">
+      <aside className="hidden w-60 shrink-0 bg-ink-900 md:block">
         <Nav />
       </aside>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <Topbar user={user} />
         <main className="flex-1">
-          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">{children}</div>
+          <div className="mx-auto max-w-7xl animate-fade-in px-4 py-8 sm:px-6 lg:px-8">
+            {children}
+          </div>
         </main>
       </div>
     </div>
