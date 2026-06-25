@@ -25,7 +25,8 @@ type IconName =
   | "pound"
   | "route"
   | "menu"
-  | "close";
+  | "close"
+  | "chart";
 
 const paths: Record<IconName, React.ReactNode> = {
   dashboard: (
@@ -136,6 +137,12 @@ const paths: Record<IconName, React.ReactNode> = {
   ),
   menu: <path d="M3 6h18M3 12h18M3 18h18" />,
   close: <path d="M18 6 6 18M6 6l12 12" />,
+  chart: (
+    <>
+      <path d="M3 3v18h18" />
+      <path d="M7 14v3M12 9v8M17 5v12" />
+    </>
+  ),
 };
 
 export function Icon({

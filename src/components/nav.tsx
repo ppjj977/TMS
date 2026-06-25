@@ -34,6 +34,7 @@ const sections: Section[] = [
     title: "Finance",
     items: [
       { href: "/invoices", label: "Invoices", icon: "invoices" },
+      { href: "/reports", label: "Reports", icon: "chart" },
       { href: "/settings", label: "Company settings", icon: "rates" },
     ],
   },

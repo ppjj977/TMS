@@ -10,6 +10,7 @@ import {
   stopTypeLabels,
   vehicleTypeLabels,
 } from "@/lib/format";
+import { computeItinerary, resolveProfile } from "@/lib/routing";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function RunSheetPage({
   const start = new Date(day.getFullYear(), day.getMonth(), day.getDate());
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
 
-  const [driver, company, jobs] = await Promise.all([
+  const [driver, company, jobs, profiles] = await Promise.all([
     prisma.driver.findUnique({ where: { id: driverId }, include: { defaultVehicle: true } }),
     getCompanySetting(),
     prisma.job.findMany({
@@ -35,8 +36,18 @@ export default async function RunSheetPage({
       include: { customer: true, vehicle: true, stops: { orderBy: { sequence: "asc" } } },
       orderBy: { serviceDate: "asc" },
     }),
+    prisma.vehicleTypeProfile.findMany(),
   ]);
   if (!driver) notFound();
+
+  const profileMap = new Map(profiles.map((p) => [p.type, p]));
+  const etaFor = (job: (typeof jobs)[number]) =>
+    computeItinerary(
+      job.stops.map((s) => ({ lat: s.latitude, lng: s.longitude, requested: s.windowFrom, deadline: s.windowTo })),
+      job.serviceDate,
+      resolveProfile(profileMap.get(job.vehicleType), job.vehicle),
+    );
+  const fmt = (d: Date | null) => (d ? d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "");
 
   const totalStops = jobs.reduce((n, j) => n + j.stops.length, 0);
   const totalMiles = jobs.reduce((n, j) => n + j.distanceMiles, 0);
@@ -82,7 +93,9 @@ export default async function RunSheetPage({
           <p className="mt-8 text-center text-sm text-slate-400">No jobs allocated for this date.</p>
         ) : (
           <div className="mt-6 space-y-5">
-            {jobs.map((job) => (
+            {jobs.map((job) => {
+              const itin = etaFor(job);
+              return (
               <div key={job.id} className="break-inside-avoid">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-1">
                   <div className="font-semibold text-slate-900">
@@ -94,8 +107,20 @@ export default async function RunSheetPage({
                   </div>
                 </div>
                 <table className="mt-2 w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase tracking-wider text-slate-400">
+                      <th className="w-8 py-1">#</th>
+                      <th className="w-20 py-1">Type</th>
+                      <th className="py-1">Address</th>
+                      <th className="w-16 py-1 text-right">ETA</th>
+                      <th className="w-24 py-1 text-right">Window</th>
+                      <th className="w-16 py-1 text-right">Done</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {job.stops.map((s) => (
+                    {job.stops.map((s, i) => {
+                      const leg = itin.legs[i];
+                      return (
                       <tr key={s.id} className="border-b border-slate-100 align-top">
                         <td className="w-8 py-2 font-semibold text-slate-500">{s.sequence}</td>
                         <td className="w-20 py-2">
@@ -109,16 +134,21 @@ export default async function RunSheetPage({
                           {s.city ? `, ${s.city}` : ""} · {s.postcode}
                           {s.contactName && <div className="text-xs text-slate-500">{s.contactName} {s.contactPhone}</div>}
                         </td>
+                        <td className={`w-16 py-2 text-right text-xs ${leg?.late ? "font-semibold text-red-600" : "text-slate-600"}`}>
+                          {fmt(leg?.arrival ?? null)}{leg?.late ? " ⚠" : ""}
+                        </td>
                         <td className="w-24 py-2 text-right text-xs text-slate-500">
                           {s.windowFrom ? `${formatTime(s.windowFrom)}–${formatTime(s.windowTo)}` : ""}
                         </td>
                         <td className="w-16 py-2 text-right text-xs text-slate-400">______</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

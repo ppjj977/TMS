@@ -106,6 +106,50 @@ export function BookingForm({
   function removeStop(key: number) {
     setStops((s) => (s.length > 1 ? s.filter((r) => r.key !== key) : s));
   }
+  function move(index: number, dir: -1 | 1) {
+    setStops((s) => {
+      const j = index + dir;
+      if (j < 0 || j >= s.length) return s;
+      const copy = [...s];
+      [copy[index], copy[j]] = [copy[j], copy[index]];
+      return copy;
+    });
+  }
+  // Nearest-neighbour ordering of geocoded stops from the first; keeps the
+  // first stop fixed and appends any un-located stops at the end.
+  function optimise() {
+    setStops((s) => {
+      const geo = s.filter((x) => x.lat != null && x.lng != null);
+      const rest = s.filter((x) => x.lat == null || x.lng == null);
+      if (geo.length < 3) return s;
+      const hav = (a: StopRow, b: StopRow) => {
+        const R = 3958.8;
+        const toRad = (d: number) => (d * Math.PI) / 180;
+        const dLat = toRad((b.lat as number) - (a.lat as number));
+        const dLon = toRad((b.lng as number) - (a.lng as number));
+        const la1 = toRad(a.lat as number);
+        const la2 = toRad(b.lat as number);
+        const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLon / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(h));
+      };
+      const ordered = [geo[0]];
+      const pool = geo.slice(1);
+      while (pool.length) {
+        const last = ordered[ordered.length - 1];
+        let bi = 0;
+        let bd = Infinity;
+        pool.forEach((c, i) => {
+          const d = hav(last, c);
+          if (d < bd) {
+            bd = d;
+            bi = i;
+          }
+        });
+        ordered.push(pool.splice(bi, 1)[0]);
+      }
+      return [...ordered, ...rest];
+    });
+  }
 
   async function geocode(key: number, postcode: string) {
     if (postcode.trim().length < 4) return;
@@ -245,7 +289,12 @@ export function BookingForm({
         <div className="space-y-4 lg:col-span-2">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">Route ({stops.length} stops)</h2>
-            <Button type="button" variant="secondary" onClick={addStop}>+ Add stop</Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" onClick={optimise} disabled={geocodedCount < 3}>
+                Optimise
+              </Button>
+              <Button type="button" variant="secondary" onClick={addStop}>+ Add stop</Button>
+            </div>
           </div>
           {stops.map((stop, idx) => (
             <StopFields
@@ -254,8 +303,11 @@ export function BookingForm({
               stop={stop}
               addresses={addresses}
               canRemove={stops.length > 1}
+              canUp={idx > 0}
+              canDown={idx < stops.length - 1}
               onPatch={(p) => patch(stop.key, p)}
               onRemove={() => removeStop(stop.key)}
+              onMove={(dir) => move(idx, dir)}
               onGeocode={() => geocode(stop.key, stop.postcode)}
               onApplySaved={(id) => applySaved(stop.key, id)}
             />
@@ -356,8 +408,11 @@ function StopFields({
   stop,
   addresses,
   canRemove,
+  canUp,
+  canDown,
   onPatch,
   onRemove,
+  onMove,
   onGeocode,
   onApplySaved,
 }: {
@@ -365,8 +420,11 @@ function StopFields({
   stop: StopRow;
   addresses: SavedAddressOption[];
   canRemove: boolean;
+  canUp: boolean;
+  canDown: boolean;
   onPatch: (p: Partial<StopRow>) => void;
   onRemove: () => void;
+  onMove: (dir: -1 | 1) => void;
   onGeocode: () => void;
   onApplySaved: (id: string) => void;
 }) {
@@ -378,14 +436,34 @@ function StopFields({
           {stop.geo === "ok" && <Badge color="green">located</Badge>}
           {stop.geo === "fail" && <Badge color="amber">not found</Badge>}
         </span>
-        <button
-          type="button"
-          onClick={onRemove}
-          disabled={!canRemove}
-          className="text-xs font-medium text-red-600 hover:underline disabled:opacity-40"
-        >
-          Remove
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onMove(-1)}
+            disabled={!canUp}
+            aria-label="Move up"
+            className="flex h-6 w-6 items-center justify-center rounded text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 disabled:opacity-30"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove(1)}
+            disabled={!canDown}
+            aria-label="Move down"
+            className="flex h-6 w-6 items-center justify-center rounded text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 disabled:opacity-30"
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={!canRemove}
+            className="ml-1 text-xs font-medium text-red-600 hover:underline disabled:opacity-40"
+          >
+            Remove
+          </button>
+        </div>
       </div>
 
       {addresses.length > 0 && (

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { StopStatus } from "@prisma/client";
 import { updateStopStatus } from "@/actions/bookings";
+import { computeItinerary, resolveProfile } from "@/lib/routing";
 import { Badge, Card, JobStatusBadge, StopStatusBadge } from "@/components/ui";
 import { PodForm } from "@/components/pod-form";
 import {
@@ -26,9 +27,17 @@ export default async function DriverJobPage({
 
   const job = await prisma.job.findFirst({
     where: { id, driverId: user.driverId },
-    include: { customer: true, stops: { orderBy: { sequence: "asc" } } },
+    include: { customer: true, vehicle: true, stops: { orderBy: { sequence: "asc" } } },
   });
   if (!job) notFound();
+
+  const typeProfile = await prisma.vehicleTypeProfile.findUnique({ where: { type: job.vehicleType } });
+  const itinerary = computeItinerary(
+    job.stops.map((s) => ({ lat: s.latitude, lng: s.longitude, requested: s.windowFrom, deadline: s.windowTo })),
+    job.serviceDate,
+    resolveProfile(typeProfile, job.vehicle),
+  );
+  const fmt = (d: Date | null) => (d ? d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—");
 
   return (
     <div>
@@ -52,8 +61,9 @@ export default async function DriverJobPage({
       )}
 
       <ol className="space-y-3">
-        {job.stops.map((stop) => {
+        {job.stops.map((stop, idx) => {
           const isDone = stop.status === StopStatus.COMPLETED;
+          const leg = itinerary.legs[idx];
           const mapsQuery = encodeURIComponent(
             `${stop.addressLine1}, ${stop.postcode}`,
           );
@@ -68,6 +78,11 @@ export default async function DriverJobPage({
                     {stopTypeLabels[stop.type]}
                   </Badge>
                   <StopStatusBadge status={stop.status} />
+                  {!isDone && leg?.arrival && (
+                    <span className={`ml-auto text-xs font-medium ${leg.late ? "text-red-600" : "text-slate-500"}`}>
+                      ETA {fmt(leg.arrival)}{leg.late ? " ⚠" : ""}
+                    </span>
+                  )}
                 </div>
 
                 <div className="mt-2 text-sm">
