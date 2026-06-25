@@ -35,6 +35,8 @@ export default async function NewBookingPage() {
               postcode: a.postcode,
               contactName: a.contactName,
               contactPhone: a.contactPhone,
+              latitude: a.latitude,
+              longitude: a.longitude,
             })),
           }))}
         />
