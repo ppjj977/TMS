@@ -31,7 +31,7 @@ export default async function PortalLayout({
             <Link href="/portal" className="text-lg font-semibold text-brand-700">
               {customer?.name ?? "Customer portal"}
             </Link>
-            <nav className="hidden gap-4 text-sm font-medium text-gray-600 sm:flex">
+            <nav className="flex gap-4 text-sm font-medium text-gray-600">
               <Link href="/portal" className="hover:text-gray-900">My bookings</Link>
               <Link href="/portal/new" className="hover:text-gray-900">New booking</Link>
             </nav>

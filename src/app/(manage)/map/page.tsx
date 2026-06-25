@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { JobStatus } from "@prisma/client";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { lookupPostcode } from "@/lib/postcode";
 import { MapView } from "./map-view";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,32 @@ export default async function MapPage() {
     orderBy: { serviceDate: "asc" },
     take: 200,
   });
+
+  // Self-heal: backfill coordinates for any stops that have a postcode but were
+  // never geocoded (e.g. booked while the lookup was unavailable). Best-effort
+  // and capped so the page stays responsive; persists so it only runs once.
+  let geocoded = 0;
+  for (const job of jobs) {
+    for (const stop of job.stops) {
+      if (geocoded >= 40) break;
+      if (stop.latitude == null && stop.postcode) {
+        const g = await lookupPostcode(stop.postcode);
+        if (g) {
+          stop.latitude = g.latitude;
+          stop.longitude = g.longitude;
+          geocoded++;
+          await prisma.stop.update({
+            where: { id: stop.id },
+            data: {
+              latitude: g.latitude,
+              longitude: g.longitude,
+              city: stop.city ?? g.town,
+            },
+          });
+        }
+      }
+    }
+  }
 
   const mapped = jobs.map((j) => ({
     id: j.id,
