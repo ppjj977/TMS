@@ -13,10 +13,23 @@ import {
   vehicleTypeLabels,
 } from "@/lib/format";
 
+export interface SavedAddressOption {
+  id: string;
+  label: string;
+  name: string | null;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string | null;
+  postcode: string;
+  contactName: string | null;
+  contactPhone: string | null;
+}
+
 interface CustomerOption {
   id: string;
   name: string;
   contacts: { id: string; name: string }[];
+  savedAddresses: SavedAddressOption[];
 }
 
 interface StopRow {
@@ -36,17 +49,12 @@ export function BookingForm({ customers }: { customers: CustomerOption[] }) {
     newStop("DELIVERY"),
   ]);
 
-  const contacts = useMemo(
-    () => customers.find((c) => c.id === customerId)?.contacts ?? [],
+  const selected = useMemo(
+    () => customers.find((c) => c.id === customerId),
     [customers, customerId],
   );
-
-  function addStop() {
-    setStops((s) => [...s, newStop()]);
-  }
-  function removeStop(key: number) {
-    setStops((s) => (s.length > 1 ? s.filter((r) => r.key !== key) : s));
-  }
+  const contacts = selected?.contacts ?? [];
+  const addresses = selected?.savedAddresses ?? [];
 
   return (
     <form action={createBooking} className="space-y-6">
@@ -92,7 +100,15 @@ export function BookingForm({ customers }: { customers: CustomerOption[] }) {
             <Input type="datetime-local" name="serviceDate" required />
           </Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Distance (miles)" hint="Leave 0 to auto-estimate from postcodes">
+            <Field label="Pieces">
+              <Input type="number" min="1" name="pieces" defaultValue="1" />
+            </Field>
+            <Field label="Weight (kg)">
+              <Input type="number" step="0.1" min="0" name="weightKg" defaultValue="0" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Distance (miles)" hint="0 = auto-estimate">
               <Input type="number" step="0.1" min="0" name="distanceMiles" defaultValue="0" />
             </Field>
             <Field label="Est. minutes">
@@ -110,7 +126,7 @@ export function BookingForm({ customers }: { customers: CustomerOption[] }) {
       <Card className="p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Stops (drops)</h2>
-          <Button type="button" variant="secondary" onClick={addStop}>
+          <Button type="button" variant="secondary" onClick={() => setStops((s) => [...s, newStop()])}>
             + Add stop
           </Button>
         </div>
@@ -121,8 +137,9 @@ export function BookingForm({ customers }: { customers: CustomerOption[] }) {
               key={stop.key}
               index={idx}
               type={stop.type}
+              addresses={addresses}
               canRemove={stops.length > 1}
-              onRemove={() => removeStop(stop.key)}
+              onRemove={() => setStops((s) => s.filter((r) => r.key !== stop.key))}
             />
           ))}
         </div>
@@ -138,29 +155,51 @@ export function BookingForm({ customers }: { customers: CustomerOption[] }) {
 function StopFields({
   index,
   type,
+  addresses,
   canRemove,
   onRemove,
 }: {
   index: number;
   type: string;
+  addresses: SavedAddressOption[];
   canRemove: boolean;
   onRemove: () => void;
 }) {
-  const [postcode, setPostcode] = useState("");
-  const [city, setCity] = useState("");
+  const [f, setF] = useState({
+    name: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    postcode: "",
+    contactName: "",
+    contactPhone: "",
+  });
   const [status, setStatus] = useState<"idle" | "loading" | "ok" | "fail">("idle");
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setF((p) => ({ ...p, [k]: e.target.value }));
+
+  function applySaved(id: string) {
+    const a = addresses.find((x) => x.id === id);
+    if (!a) return;
+    setF({
+      name: a.name ?? "",
+      addressLine1: a.addressLine1,
+      addressLine2: a.addressLine2 ?? "",
+      city: a.city ?? "",
+      postcode: a.postcode,
+      contactName: a.contactName ?? "",
+      contactPhone: a.contactPhone ?? "",
+    });
+  }
 
   async function lookup() {
-    if (postcode.trim().length < 4) return;
+    if (f.postcode.trim().length < 4) return;
     setStatus("loading");
-    const result = await lookupPostcodeAction(postcode);
-    if (result) {
-      setPostcode(result.postcode);
-      if (result.town) setCity(result.town);
+    const r = await lookupPostcodeAction(f.postcode);
+    if (r) {
+      setF((p) => ({ ...p, postcode: r.postcode, city: p.city || r.town || "" }));
       setStatus("ok");
-    } else {
-      setStatus("fail");
-    }
+    } else setStatus("fail");
   }
 
   return (
@@ -170,12 +209,28 @@ function StopFields({
         <button
           type="button"
           onClick={onRemove}
-          className="text-xs font-medium text-red-600 hover:underline disabled:opacity-40"
           disabled={!canRemove}
+          className="text-xs font-medium text-red-600 hover:underline disabled:opacity-40"
         >
           Remove
         </button>
       </div>
+
+      {addresses.length > 0 && (
+        <div className="mb-3">
+          <Field label="Use saved address">
+            <Select
+              defaultValue=""
+              onChange={(e) => applySaved(e.target.value)}
+              options={[
+                { value: "", label: "— pick from address book —" },
+                ...addresses.map((a) => ({ value: a.id, label: a.label })),
+              ]}
+            />
+          </Field>
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Type" required>
           <Select
@@ -185,16 +240,16 @@ function StopFields({
           />
         </Field>
         <Field label="Site / company name">
-          <Input name="stop_name" />
+          <Input name="stop_name" value={f.name} onChange={set("name")} />
         </Field>
         <Field label="Postcode" required hint={statusHint(status)}>
           <div className="flex gap-2">
             <Input
               name="stop_postcode"
               required
-              value={postcode}
+              value={f.postcode}
               onChange={(e) => {
-                setPostcode(e.target.value);
+                set("postcode")(e);
                 setStatus("idle");
               }}
             />
@@ -204,19 +259,19 @@ function StopFields({
           </div>
         </Field>
         <Field label="Address line 1" required>
-          <Input name="stop_addressLine1" required />
+          <Input name="stop_addressLine1" required value={f.addressLine1} onChange={set("addressLine1")} />
         </Field>
         <Field label="Address line 2">
-          <Input name="stop_addressLine2" />
+          <Input name="stop_addressLine2" value={f.addressLine2} onChange={set("addressLine2")} />
         </Field>
         <Field label="City / town">
-          <Input name="stop_city" value={city} onChange={(e) => setCity(e.target.value)} />
+          <Input name="stop_city" value={f.city} onChange={set("city")} />
         </Field>
         <Field label="Contact name">
-          <Input name="stop_contactName" />
+          <Input name="stop_contactName" value={f.contactName} onChange={set("contactName")} />
         </Field>
         <Field label="Contact phone">
-          <Input name="stop_contactPhone" />
+          <Input name="stop_contactPhone" value={f.contactPhone} onChange={set("contactPhone")} />
         </Field>
         <div />
         <Field label="Window from">
@@ -235,6 +290,6 @@ function StopFields({
 
 function statusHint(status: string): string | undefined {
   if (status === "ok") return "✓ Postcode found — town filled in";
-  if (status === "fail") return "Postcode not found — enter address manually";
+  if (status === "fail") return "Postcode not found — enter manually";
   return undefined;
 }

@@ -85,6 +85,8 @@ const bookingSchema = z.object({
   serviceDate: z.string().trim().min(1, "Service date is required"),
   distanceMiles: z.coerce.number().min(0).default(0),
   estimatedMins: z.coerce.number().int().min(0).default(0),
+  pieces: z.coerce.number().int().min(1).default(1),
+  weightKg: z.coerce.number().min(0).default(0),
   customerRef: z.string().trim().optional(),
   notes: z.string().trim().optional(),
 });
@@ -103,6 +105,8 @@ async function createJobCore(
     serviceDate: formData.get("serviceDate"),
     distanceMiles: formData.get("distanceMiles") || 0,
     estimatedMins: formData.get("estimatedMins") || 0,
+    pieces: formData.get("pieces") || 1,
+    weightKg: formData.get("weightKg") || 0,
     customerRef: formData.get("customerRef") || undefined,
     notes: formData.get("notes") || undefined,
   });
@@ -151,6 +155,8 @@ async function createJobCore(
       timeBand,
       distanceMiles,
       estimatedMins: data.estimatedMins,
+      pieces: data.pieces,
+      weightKg: data.weightKg,
       customerRef: data.customerRef,
       reference_notes: data.notes,
       customerCharge: pricing.customerCharge,

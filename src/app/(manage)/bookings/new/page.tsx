@@ -10,6 +10,7 @@ export default async function NewBookingPage() {
     orderBy: { name: "asc" },
     include: {
       contacts: { orderBy: [{ isPrimary: "desc" }, { name: "asc" }] },
+      savedAddresses: { orderBy: { label: "asc" } },
     },
   });
 
@@ -24,6 +25,17 @@ export default async function NewBookingPage() {
             id: c.id,
             name: c.name,
             contacts: c.contacts.map((ct) => ({ id: ct.id, name: ct.name })),
+            savedAddresses: c.savedAddresses.map((a) => ({
+              id: a.id,
+              label: a.label,
+              name: a.name,
+              addressLine1: a.addressLine1,
+              addressLine2: a.addressLine2,
+              city: a.city,
+              postcode: a.postcode,
+              contactName: a.contactName,
+              contactPhone: a.contactPhone,
+            })),
           }))}
         />
       )}

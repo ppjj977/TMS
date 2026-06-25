@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { lookupPostcode } from "@/lib/postcode";
 import { AccountStatus } from "@prisma/client";
 
 const customerSchema = z.object({
@@ -73,5 +74,51 @@ export async function createContact(customerId: string, formData: FormData) {
 
 export async function deleteContact(id: string, customerId: string) {
   await prisma.contact.delete({ where: { id } });
+  revalidatePath(`/customers/${customerId}`);
+}
+
+// --- Saved address book -----------------------------------------------------
+
+const savedAddressSchema = z.object({
+  label: z.string().trim().min(1, "Label is required"),
+  name: z.string().trim().optional(),
+  addressLine1: z.string().trim().min(1, "Address is required"),
+  addressLine2: z.string().trim().optional(),
+  city: z.string().trim().optional(),
+  postcode: z.string().trim().min(1, "Postcode is required"),
+  contactName: z.string().trim().optional(),
+  contactPhone: z.string().trim().optional(),
+});
+
+export async function createSavedAddress(customerId: string, formData: FormData) {
+  const data = savedAddressSchema.parse({
+    label: formData.get("label"),
+    name: formData.get("name") || undefined,
+    addressLine1: formData.get("addressLine1"),
+    addressLine2: formData.get("addressLine2") || undefined,
+    city: formData.get("city") || undefined,
+    postcode: formData.get("postcode"),
+    contactName: formData.get("contactName") || undefined,
+    contactPhone: formData.get("contactPhone") || undefined,
+  });
+
+  // Geocode the postcode so it can feed distance estimation later.
+  const geo = await lookupPostcode(data.postcode);
+
+  await prisma.savedAddress.create({
+    data: {
+      ...data,
+      customerId,
+      postcode: data.postcode.toUpperCase(),
+      city: data.city || geo?.town || null,
+      latitude: geo?.latitude ?? null,
+      longitude: geo?.longitude ?? null,
+    },
+  });
+  revalidatePath(`/customers/${customerId}`);
+}
+
+export async function deleteSavedAddress(id: string, customerId: string) {
+  await prisma.savedAddress.delete({ where: { id } });
   revalidatePath(`/customers/${customerId}`);
 }

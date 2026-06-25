@@ -83,6 +83,15 @@ async function main() {
     },
   });
 
+  // --- Saved addresses (address book) -----------------------------------
+  await prisma.savedAddress.createMany({
+    data: [
+      { customerId: acme.id, label: "Acme HQ (Trafford Park)", name: "Acme Components Ltd", addressLine1: "Unit 4, Trafford Park", city: "Manchester", postcode: "M17 1AB" },
+      { customerId: acme.id, label: "Northern Assembly (Bolton)", name: "Northern Assembly", addressLine1: "8 Mill Lane", city: "Bolton", postcode: "BL1 4RT" },
+      { customerId: brightLogistics.id, label: "Bright DC (Leeds)", name: "Bright Logistics", addressLine1: "12 Canal Road", city: "Leeds", postcode: "LS12 2AA" },
+    ],
+  });
+
   // --- Users (auth) -----------------------------------------------------
   // All demo users share the password "password".
   const pw = hashPassword("password");
@@ -168,6 +177,8 @@ async function main() {
     serviceDate: Date;
     distanceMiles: number;
     estimatedMins: number;
+    pieces?: number;
+    weightKg?: number;
     driverId?: string;
     vehicleId?: string;
     status?: any;
@@ -197,6 +208,8 @@ async function main() {
         timeBand,
         distanceMiles: args.distanceMiles,
         estimatedMins: args.estimatedMins,
+        pieces: args.pieces ?? 1,
+        weightKg: args.weightKg ?? 0,
         driverId: args.driverId ?? null,
         vehicleId: args.vehicleId ?? null,
         status: args.status ?? "BOOKED",
@@ -226,6 +239,8 @@ async function main() {
     serviceDate: at(9),
     distanceMiles: 42,
     estimatedMins: 120,
+    pieces: 6,
+    weightKg: 48,
     driverId: dave.id,
     vehicleId: smallVan.id,
     status: "ALLOCATED",
@@ -256,6 +271,8 @@ async function main() {
     serviceDate: at(7),
     distanceMiles: 130,
     estimatedMins: 300,
+    pieces: 12,
+    weightKg: 320,
     driverId: priya.id,
     vehicleId: luton.id,
     status: "ON_ROUTE",

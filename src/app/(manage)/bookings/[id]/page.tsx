@@ -119,6 +119,8 @@ export default async function BookingDetailPage({
               <Detail label="Vehicle type">{vehicleTypeLabels[job.vehicleType]}</Detail>
               <Detail label="Service date">{formatDateTime(job.serviceDate)}</Detail>
               <Detail label="Distance">{miles(job.distanceMiles)}</Detail>
+              <Detail label="Pieces">{job.pieces}</Detail>
+              <Detail label="Weight">{job.weightKg} kg</Detail>
               <Detail label="Day type">{dayTypeLabels[job.dayType]}</Detail>
               <Detail label="Time band">{timeBandLabels[job.timeBand]}</Detail>
               <Detail label="Est. minutes">{job.estimatedMins} min</Detail>

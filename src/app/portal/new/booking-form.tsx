@@ -13,10 +13,22 @@ import {
   vehicleTypeLabels,
 } from "@/lib/format";
 
+interface AddressOption {
+  id: string;
+  label: string;
+  name: string | null;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string | null;
+  postcode: string;
+  contactName: string | null;
+  contactPhone: string | null;
+}
+
 let key = 0;
 const newStop = (type = "DELIVERY") => ({ key: key++, type });
 
-export function PortalBookingForm() {
+export function PortalBookingForm({ addresses }: { addresses: AddressOption[] }) {
   const [stops, setStops] = useState([newStop("COLLECTION"), newStop("DELIVERY")]);
 
   return (
@@ -44,6 +56,12 @@ export function PortalBookingForm() {
           <Field label="Collection date &amp; time" required>
             <Input type="datetime-local" name="serviceDate" required />
           </Field>
+          <Field label="Pieces">
+            <Input type="number" min="1" name="pieces" defaultValue="1" />
+          </Field>
+          <Field label="Weight (kg)">
+            <Input type="number" step="0.1" min="0" name="weightKg" defaultValue="0" />
+          </Field>
         </div>
         <div className="mt-4">
           <Field label="Notes">
@@ -67,6 +85,7 @@ export function PortalBookingForm() {
               key={stop.key}
               index={idx}
               type={stop.type}
+              addresses={addresses}
               canRemove={stops.length > 1}
               onRemove={() => setStops((s) => s.filter((r) => r.key !== stop.key))}
             />
@@ -84,24 +103,46 @@ export function PortalBookingForm() {
 function PortalStop({
   index,
   type,
+  addresses,
   canRemove,
   onRemove,
 }: {
   index: number;
   type: string;
+  addresses: AddressOption[];
   canRemove: boolean;
   onRemove: () => void;
 }) {
-  const [postcode, setPostcode] = useState("");
-  const [city, setCity] = useState("");
+  const [f, setF] = useState({
+    name: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    postcode: "",
+    contactName: "",
+    contactPhone: "",
+  });
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setF((p) => ({ ...p, [k]: e.target.value }));
+
+  function applySaved(id: string) {
+    const a = addresses.find((x) => x.id === id);
+    if (!a) return;
+    setF({
+      name: a.name ?? "",
+      addressLine1: a.addressLine1,
+      addressLine2: a.addressLine2 ?? "",
+      city: a.city ?? "",
+      postcode: a.postcode,
+      contactName: a.contactName ?? "",
+      contactPhone: a.contactPhone ?? "",
+    });
+  }
 
   async function lookup() {
-    if (postcode.trim().length < 4) return;
-    const r = await lookupPostcodeAction(postcode);
-    if (r) {
-      setPostcode(r.postcode);
-      if (r.town) setCity(r.town);
-    }
+    if (f.postcode.trim().length < 4) return;
+    const r = await lookupPostcodeAction(f.postcode);
+    if (r) setF((p) => ({ ...p, postcode: r.postcode, city: p.city || r.town || "" }));
   }
 
   return (
@@ -117,6 +158,22 @@ function PortalStop({
           Remove
         </button>
       </div>
+
+      {addresses.length > 0 && (
+        <div className="mb-3">
+          <Field label="Use saved address">
+            <Select
+              defaultValue=""
+              onChange={(e) => applySaved(e.target.value)}
+              options={[
+                { value: "", label: "— pick from address book —" },
+                ...addresses.map((a) => ({ value: a.id, label: a.label })),
+              ]}
+            />
+          </Field>
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Type" required>
           <Select
@@ -126,35 +183,30 @@ function PortalStop({
           />
         </Field>
         <Field label="Site / company name">
-          <Input name="stop_name" />
+          <Input name="stop_name" value={f.name} onChange={set("name")} />
         </Field>
         <Field label="Postcode" required>
           <div className="flex gap-2">
-            <Input
-              name="stop_postcode"
-              required
-              value={postcode}
-              onChange={(e) => setPostcode(e.target.value)}
-            />
+            <Input name="stop_postcode" required value={f.postcode} onChange={set("postcode")} />
             <Button type="button" variant="secondary" onClick={lookup} className="shrink-0">
               Find
             </Button>
           </div>
         </Field>
         <Field label="Address line 1" required>
-          <Input name="stop_addressLine1" required />
+          <Input name="stop_addressLine1" required value={f.addressLine1} onChange={set("addressLine1")} />
         </Field>
         <Field label="Address line 2">
-          <Input name="stop_addressLine2" />
+          <Input name="stop_addressLine2" value={f.addressLine2} onChange={set("addressLine2")} />
         </Field>
         <Field label="City / town">
-          <Input name="stop_city" value={city} onChange={(e) => setCity(e.target.value)} />
+          <Input name="stop_city" value={f.city} onChange={set("city")} />
         </Field>
         <Field label="Contact name">
-          <Input name="stop_contactName" />
+          <Input name="stop_contactName" value={f.contactName} onChange={set("contactName")} />
         </Field>
         <Field label="Contact phone">
-          <Input name="stop_contactPhone" />
+          <Input name="stop_contactPhone" value={f.contactPhone} onChange={set("contactPhone")} />
         </Field>
         <Field label="Stop notes">
           <Input name="stop_notes" />

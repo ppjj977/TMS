@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { createContact, deleteContact } from "@/actions/customers";
+import {
+  createContact,
+  deleteContact,
+  createSavedAddress,
+  deleteSavedAddress,
+} from "@/actions/customers";
 import {
   AccountStatusBadge,
   Badge,
@@ -28,6 +33,7 @@ export default async function CustomerDetailPage({
     where: { id },
     include: {
       contacts: { orderBy: [{ isPrimary: "desc" }, { name: "asc" }] },
+      savedAddresses: { orderBy: { label: "asc" } },
       jobs: { orderBy: { serviceDate: "desc" }, take: 15 },
       rateCards: { where: { active: true } },
     },
@@ -102,6 +108,64 @@ export default async function CustomerDetailPage({
               </label>
               <div className="flex items-end justify-end">
                 <Button type="submit" variant="secondary">+ Add contact</Button>
+              </div>
+            </form>
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="mb-4 text-lg font-semibold">Address book</h2>
+            {customer.savedAddresses.length === 0 ? (
+              <p className="text-sm text-gray-500">No saved addresses yet.</p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {customer.savedAddresses.map((a) => (
+                  <li key={a.id} className="flex items-start justify-between py-2 text-sm">
+                    <div>
+                      <span className="font-medium">{a.label}</span>
+                      <div className="text-gray-500">
+                        {a.name && `${a.name} · `}
+                        {a.addressLine1}
+                        {a.city ? `, ${a.city}` : ""} · {a.postcode}
+                      </div>
+                    </div>
+                    <form action={deleteSavedAddress.bind(null, a.id, customer.id)}>
+                      <button className="text-xs font-medium text-red-600 hover:underline">Remove</button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <form
+              action={createSavedAddress.bind(null, customer.id)}
+              className="mt-4 grid gap-3 border-t border-gray-100 pt-4 sm:grid-cols-2"
+            >
+              <Field label="Label" required>
+                <Input name="label" placeholder="e.g. Manchester DC" required />
+              </Field>
+              <Field label="Site / company name">
+                <Input name="name" />
+              </Field>
+              <Field label="Address line 1" required>
+                <Input name="addressLine1" required />
+              </Field>
+              <Field label="Address line 2">
+                <Input name="addressLine2" />
+              </Field>
+              <Field label="City / town">
+                <Input name="city" />
+              </Field>
+              <Field label="Postcode" required>
+                <Input name="postcode" required />
+              </Field>
+              <Field label="Contact name">
+                <Input name="contactName" />
+              </Field>
+              <Field label="Contact phone">
+                <Input name="contactPhone" />
+              </Field>
+              <div className="flex items-end justify-end sm:col-span-2">
+                <Button type="submit" variant="secondary">+ Add address</Button>
               </div>
             </form>
           </Card>

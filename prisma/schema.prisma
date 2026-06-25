@@ -149,14 +149,38 @@ model Customer {
   paymentTerms Int           @default(30) // days
   notes        String?
 
-  contacts  Contact[]
-  jobs      Job[]
-  rateCards RateCard[]
-  users     User[]
-  invoices  Invoice[]
+  contacts       Contact[]
+  jobs           Job[]
+  rateCards      RateCard[]
+  users          User[]
+  invoices       Invoice[]
+  savedAddresses SavedAddress[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// A reusable address in a customer's address book (pickup/delivery picker).
+model SavedAddress {
+  id           String  @id @default(cuid())
+  customerId   String
+  label        String // e.g. "Manchester DC"
+  name         String? // site / company name
+  addressLine1 String
+  addressLine2 String?
+  city         String?
+  postcode     String
+  contactName  String?
+  contactPhone String?
+  latitude     Float?
+  longitude    Float?
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
 }
 
 model Contact {
@@ -239,6 +263,10 @@ model Job {
   // Allocation
   driverId  String?
   vehicleId String?
+
+  // Consignment metrics
+  pieces  Int   @default(1)
+  weightKg Float @default(0)
 
   // Distance & timing used by the pricing engine
   distanceMiles Float @default(0)
