@@ -19,6 +19,12 @@ export interface PriceInputs {
   pieces?: number; // number of pieces
   customerId?: string | null;
   driverId?: string | null;
+  fromOutcode?: string | null; // collection postcode area
+  toOutcode?: string | null; // delivery postcode area
+}
+
+export function outcode(postcode: string | null | undefined): string {
+  return (postcode ?? "").trim().toUpperCase().split(/\s+/)[0] ?? "";
 }
 
 export interface PriceResult {
@@ -95,6 +101,31 @@ export async function selectRateCard(
   return applicable[0];
 }
 
+type FixedPriceRow = Prisma.FixedPriceGetPayload<{}>;
+
+// Pick the most specific matching fixed price (customer+vehicle > customer >
+// vehicle > default).
+async function selectFixedPrice(input: PriceInputs): Promise<FixedPriceRow | null> {
+  const rows = await prisma.fixedPrice.findMany({
+    where: {
+      active: true,
+      fromOutcode: input.fromOutcode!,
+      toOutcode: input.toOutcode!,
+      OR: [{ customerId: input.customerId ?? undefined }, { customerId: null }],
+    },
+  });
+  const applicable = rows.filter(
+    (r) => !r.vehicleType || r.vehicleType === input.vehicleType,
+  );
+  if (applicable.length === 0) return null;
+  applicable.sort(
+    (a, b) =>
+      (b.customerId ? 2 : 0) + (b.vehicleType ? 1 : 0) -
+      ((a.customerId ? 2 : 0) + (a.vehicleType ? 1 : 0)),
+  );
+  return applicable[0];
+}
+
 // Find the per-unit rate for a quantity within a band type, or null if no band
 // covers it.
 function bandRate(card: RateCardRow, type: RateBandType, qty: number): number | null {
@@ -112,6 +143,22 @@ function bandRate(card: RateCardRow, type: RateBandType, qty: number): number | 
  * subtotal is floored at minimumCharge, then a retail % uplift is applied.
  */
 export async function price(input: PriceInputs): Promise<PriceResult | null> {
+  // Fixed postcode→postcode pricing (customer revenue only) takes precedence.
+  if (input.kind === RateCardKind.CUSTOMER && input.fromOutcode && input.toOutcode) {
+    const fixed = await selectFixedPrice(input);
+    if (fixed) {
+      return {
+        amount: round2(fixed.price),
+        ratePerMile: 0,
+        minimumCharge: 0,
+        appliedMinimum: false,
+        rateCardId: fixed.id,
+        rateCardName: `Fixed ${fixed.fromOutcode}→${fixed.toOutcode}`,
+        breakdown: { distance: round2(fixed.price), drops: 0, pieces: 0, retailUplift: 0 },
+      };
+    }
+  }
+
   const card = await selectRateCard(input);
   if (!card) return null;
 
@@ -173,6 +220,8 @@ export async function priceJob(args: {
   pieces?: number;
   customerId: string;
   driverId?: string | null;
+  fromOutcode?: string | null;
+  toOutcode?: string | null;
 }): Promise<JobPricing> {
   const common = {
     vehicleType: args.vehicleType,
@@ -187,6 +236,8 @@ export async function priceJob(args: {
   const customer = await price({
     kind: RateCardKind.CUSTOMER,
     customerId: args.customerId,
+    fromOutcode: args.fromOutcode,
+    toOutcode: args.toOutcode,
     ...common,
   });
 

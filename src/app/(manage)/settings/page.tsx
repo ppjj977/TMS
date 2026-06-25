@@ -86,6 +86,21 @@ export default async function SettingsPage() {
           Configure →
         </Link>
       </Card>
+
+      <Card className="mt-4 flex items-center justify-between p-5">
+        <div>
+          <div className="font-medium text-slate-900">Auto supplements</div>
+          <div className="text-sm text-slate-500">
+            Out-of-hours and postcode-zone (ULEZ / congestion) charges added automatically.
+          </div>
+        </div>
+        <Link
+          href="/settings/supplements"
+          className="rounded-lg bg-white px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+        >
+          Configure →
+        </Link>
+      </Card>
     </div>
   );
 }

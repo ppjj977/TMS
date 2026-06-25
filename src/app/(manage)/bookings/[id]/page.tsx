@@ -9,6 +9,7 @@ import {
   updateJobStatus,
   updateStopStatus,
 } from "@/actions/bookings";
+import { addSupplement, removeSupplement } from "@/actions/supplements";
 import {
   Badge,
   Button,
@@ -47,6 +48,7 @@ export default async function BookingDetailPage({
       vehicle: true,
       stops: { orderBy: { sequence: "asc" } },
       events: { orderBy: { createdAt: "desc" } },
+      supplements: true,
     },
   });
 
@@ -283,10 +285,29 @@ export default async function BookingDetailPage({
               </form>
             </div>
             <dl className="space-y-2 text-sm">
-              <Row label="Customer charge" value={money(job.customerCharge)} strong />
+              <Row label="Base charge" value={money(job.baseCharge)} />
               <div className="pl-2 text-xs text-gray-500">
                 {customerRate ? `via ${customerRate.name}` : "no matching customer rate card"}
               </div>
+              {job.supplements.map((s) => (
+                <div key={s.id} className="flex items-center justify-between pl-2 text-xs">
+                  <span className="text-gray-500">
+                    + {s.label} {s.auto && <span className="text-gray-400">(auto)</span>}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-gray-700">{money(s.amount)}</span>
+                    <form action={removeSupplement.bind(null, s.id, job.id)}>
+                      <button className="text-red-500 hover:underline">✕</button>
+                    </form>
+                  </span>
+                </div>
+              ))}
+              <form action={addSupplement.bind(null, job.id)} className="flex items-center gap-1.5 pl-2">
+                <input name="label" placeholder="Supplement" className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 text-xs" />
+                <input name="amount" type="number" step="0.01" placeholder="£" className="w-16 rounded border border-slate-300 px-2 py-1 text-xs" />
+                <button className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200">Add</button>
+              </form>
+              <Row label="Customer charge" value={money(job.customerCharge)} strong />
               <Row label="Driver cost" value={money(job.driverCost)} />
               <div className="pl-2 text-xs text-gray-500">
                 {driverRate

@@ -157,6 +157,12 @@ enum QuoteStatus {
   EXPIRED
 }
 
+enum SupplementType {
+  OUT_OF_HOURS
+  POSTCODE
+  MANUAL
+}
+
 // ---------------------------------------------------------------------------
 // Customers & contacts
 // ---------------------------------------------------------------------------
@@ -188,6 +194,7 @@ model Customer {
   invoices       Invoice[]
   savedAddresses SavedAddress[]
   quotes         Quote[]
+  fixedPrices    FixedPrice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -318,7 +325,8 @@ model Job {
   timeBand TimeBand @default(DAYTIME)
 
   // Cached pricing (recomputed whenever the job changes materially)
-  customerCharge Float @default(0) // revenue
+  baseCharge     Float @default(0) // revenue before supplements
+  customerCharge Float @default(0) // revenue incl. supplements (what the customer pays)
   driverCost     Float @default(0) // cost to pay the driver
   customerRateCardId String?
   driverRateCardId   String?
@@ -336,6 +344,7 @@ model Job {
   invoice  Invoice?   @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   stops    Stop[]
   events   JobEvent[]
+  supplements JobSupplement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -552,6 +561,57 @@ model NotificationLog {
 // ---------------------------------------------------------------------------
 // Company settings (singleton) — your own billing identity, used on invoices.
 // ---------------------------------------------------------------------------
+
+// Fixed price for a postcode-area → postcode-area journey (outward codes, e.g.
+// "M17" → "LS12"). When matched it replaces distance-based pricing.
+model FixedPrice {
+  id          String       @id @default(cuid())
+  customerId  String? // null = applies to all customers
+  vehicleType VehicleType? // null = any vehicle
+  fromOutcode String // outward code, uppercased
+  toOutcode   String
+  price       Float
+  active      Boolean      @default(true)
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([customerId])
+  @@index([fromOutcode, toOutcode])
+}
+
+// A charge added on top of the base price.
+model JobSupplement {
+  id     String  @id @default(cuid())
+  jobId  String
+  label  String
+  amount Float
+  auto   Boolean @default(false) // true if applied automatically by a rule
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
+// Rules that automatically add supplements to a job at booking.
+model AutoSupplementRule {
+  id     String         @id @default(cuid())
+  name   String
+  type   SupplementType // OUT_OF_HOURS or POSTCODE
+  amount Float
+  active Boolean        @default(true)
+
+  // OUT_OF_HOURS config: out-of-hours is before startHour or at/after endHour.
+  oohStartHour  Int? // e.g. 8  (before this = OOH)
+  oohEndHour    Int? // e.g. 18 (at/after this = OOH)
+  appliesWeekend Boolean @default(false)
+
+  // POSTCODE config: comma-separated outward codes (e.g. "EC1,EC2,WC1").
+  outcodes String?
+
+  createdAt DateTime @default(now())
+}
 
 // Routing profile per vehicle type: speeds used to estimate ETAs. Short legs
 // use the urban speed, long legs the motorway speed (interpolated between).

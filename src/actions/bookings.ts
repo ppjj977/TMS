@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { nextJobReference } from "@/lib/reference";
-import { classifyDay, classifyTimeBand, priceJob } from "@/lib/pricing";
+import { classifyDay, classifyTimeBand, outcode, priceJob } from "@/lib/pricing";
+import { evaluateAutoSupplements, recomputeJobCharge } from "@/lib/supplements";
 import { lookupPostcode, routeDistanceMiles } from "@/lib/postcode";
 import { computeItinerary, DEFAULT_PROFILE } from "@/lib/routing";
 import { logJobEvent } from "@/lib/events";
@@ -135,6 +136,12 @@ async function createJobCore(
 
   const dropCount = stops.filter((s) => s.type === StopType.DELIVERY).length;
 
+  // Origin/destination outward codes for fixed postcode→postcode pricing.
+  const firstCollection = stops.find((s) => s.type === StopType.COLLECTION) ?? stops[0];
+  const lastDelivery = [...stops].reverse().find((s) => s.type === StopType.DELIVERY) ?? stops[stops.length - 1];
+  const fromOutcode = outcode(firstCollection?.postcode);
+  const toOutcode = outcode(lastDelivery?.postcode);
+
   // Deadline feasibility: run the itinerary using the vehicle's routing profile.
   const profileRow = await prisma.vehicleTypeProfile.findUnique({
     where: { type: data.vehicleType },
@@ -167,7 +174,18 @@ async function createJobCore(
     drops: dropCount,
     pieces: data.pieces,
     customerId: data.customerId,
+    fromOutcode,
+    toOutcode,
   });
+
+  // Auto supplements (out-of-hours, postcode zones) on top of the base charge.
+  const autoSupps = await evaluateAutoSupplements({
+    serviceDate,
+    postcodes: stops.map((s) => s.postcode),
+  });
+  const baseCharge = pricing.customerCharge;
+  const supTotal = autoSupps.reduce((s, x) => s + x.amount, 0);
+  const customerCharge = Math.round((baseCharge + supTotal) * 100) / 100;
 
   const reference = await nextJobReference();
 
@@ -188,10 +206,12 @@ async function createJobCore(
       deadlineRisk,
       customerRef: data.customerRef,
       reference_notes: data.notes,
-      customerCharge: pricing.customerCharge,
+      baseCharge,
+      customerCharge,
       driverCost: pricing.driverCost,
       customerRateCardId: pricing.customerRateCardId,
       driverRateCardId: pricing.driverRateCardId,
+      supplements: { create: autoSupps.map((s) => ({ label: s.label, amount: s.amount, auto: true })) },
       stops: {
         create: stops.map((s, i) => ({
           sequence: i + 1,
@@ -243,9 +263,11 @@ export async function createPortalBooking(formData: FormData) {
 async function recalc(jobId: string) {
   const job = await prisma.job.findUniqueOrThrow({
     where: { id: jobId },
-    include: { stops: true },
+    include: { stops: { orderBy: { sequence: "asc" } } },
   });
   const dropCount = job.stops.filter((s) => s.type === StopType.DELIVERY).length;
+  const firstCollection = job.stops.find((s) => s.type === StopType.COLLECTION) ?? job.stops[0];
+  const lastDelivery = [...job.stops].reverse().find((s) => s.type === StopType.DELIVERY) ?? job.stops[job.stops.length - 1];
   const pricing = await priceJob({
     vehicleType: job.vehicleType,
     dayType: job.dayType,
@@ -256,16 +278,20 @@ async function recalc(jobId: string) {
     pieces: job.pieces,
     customerId: job.customerId,
     driverId: job.driverId,
+    fromOutcode: outcode(firstCollection?.postcode),
+    toOutcode: outcode(lastDelivery?.postcode),
   });
   await prisma.job.update({
     where: { id: jobId },
     data: {
-      customerCharge: pricing.customerCharge,
+      baseCharge: pricing.customerCharge,
       driverCost: pricing.driverCost,
       customerRateCardId: pricing.customerRateCardId,
       driverRateCardId: pricing.driverRateCardId,
     },
   });
+  // Fold supplements into the customer charge.
+  await recomputeJobCharge(jobId);
 }
 
 export async function recalcJobPricing(jobId: string) {

@@ -28,6 +28,7 @@ const sections: Section[] = [
       { href: "/drivers", label: "Drivers", icon: "drivers" },
       { href: "/vehicles", label: "Vehicles", icon: "vehicles" },
       { href: "/rate-cards", label: "Rate cards", icon: "rates" },
+      { href: "/fixed-prices", label: "Fixed prices", icon: "pound" },
     ],
   },
   {

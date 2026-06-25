@@ -21,6 +21,9 @@ async function main() {
   console.log("Seeding TMS demo data…");
 
   // Clear existing data (idempotent reseed).
+  await prisma.jobSupplement.deleteMany();
+  await prisma.fixedPrice.deleteMany();
+  await prisma.autoSupplementRule.deleteMany();
   await prisma.vehicleTypeProfile.deleteMany();
   await prisma.trafficScreen.deleteMany();
   await prisma.companySetting.deleteMany();
@@ -200,6 +203,17 @@ async function main() {
     "SK4 1AR": [53.4106, -2.1576],
   };
 
+  // --- Fixed prices & auto supplements (before jobs so they apply) ------
+  await prisma.fixedPrice.create({
+    data: { customerId: brightLogistics.id, vehicleType: "LWB_VAN", fromOutcode: "LS12", toOutcode: "YO30", price: 95 },
+  });
+  await prisma.autoSupplementRule.createMany({
+    data: [
+      { name: "Out of hours", type: "OUT_OF_HOURS", amount: 15, oohStartHour: 8, oohEndHour: 18, appliesWeekend: true },
+      { name: "London ULEZ", type: "POSTCODE", amount: 12.5, outcodes: "EC1,EC2,EC3,EC4,WC1,WC2,W1,SW1,N1,SE1" },
+    ],
+  });
+
   // --- Jobs (bookings) --------------------------------------------------
   const today = new Date();
   function at(hour: number, dayOffset = 0): Date {
@@ -226,6 +240,9 @@ async function main() {
   }) {
     const dayType = classifyDay(args.serviceDate);
     const timeBand = classifyTimeBand(args.serviceDate);
+    const oc = (pc: string) => pc.trim().toUpperCase().split(/\s+/)[0];
+    const firstCol = args.stops.find((s) => s.type === "COLLECTION") ?? args.stops[0];
+    const lastDel = [...args.stops].reverse().find((s) => s.type === "DELIVERY") ?? args.stops[args.stops.length - 1];
     const pricing = await priceJob({
       vehicleType: args.vehicleType,
       dayType,
@@ -236,6 +253,8 @@ async function main() {
       pieces: args.pieces ?? 1,
       customerId: args.customerId,
       driverId: args.driverId,
+      fromOutcode: oc(firstCol.postcode),
+      toOutcode: oc(lastDel.postcode),
     });
     const reference = await nextJobReference(args.serviceDate);
 
@@ -251,6 +270,7 @@ async function main() {
         estimatedMins: args.estimatedMins,
         pieces: args.pieces ?? 1,
         weightKg: args.weightKg ?? 0,
+        baseCharge: pricing.customerCharge,
         driverId: args.driverId ?? null,
         vehicleId: args.vehicleId ?? null,
         status: args.status ?? "BOOKED",
