@@ -96,6 +96,13 @@ export default async function BookingDetailPage({
         action={
           <div className="flex items-center gap-2">
             <JobStatusBadge status={job.status} />
+            <Link
+              href={`/pod/${job.id}`}
+              target="_blank"
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+            >
+              POD / PDF
+            </Link>
             <Link href="/bookings" className="text-sm font-medium text-brand-600 hover:underline">
               ← Bookings
             </Link>

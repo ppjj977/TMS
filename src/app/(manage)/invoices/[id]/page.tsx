@@ -35,6 +35,13 @@ export default async function InvoiceDetailPage({
         action={
           <div className="flex items-center gap-2">
             <InvoiceStatusBadge status={invoice.status} />
+            <Link
+              href={`/invoice/${invoice.id}`}
+              target="_blank"
+              className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              Print / PDF
+            </Link>
             <Link href="/invoices" className="text-sm font-medium text-brand-600 hover:underline">
               ← Invoices
             </Link>
