@@ -1,0 +1,300 @@
+// Transparent Management System (TMS)
+// Same-day, multi-drop transport operations.
+//
+// Core flow:
+//   Customer -> Contact -> books a Job (booking) with one or more Stops (drops)
+//   -> Job is allocated to a Driver + Vehicle -> progressed through statuses.
+//   Pricing is derived from RateCards (customer revenue + driver cost).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum VehicleType {
+  BIKE
+  CAR
+  SMALL_VAN
+  SWB_VAN // short wheel base
+  LWB_VAN // long wheel base
+  LUTON
+  SEVEN_FIVE_TONNE
+  EIGHTEEN_TONNE
+  ARTIC
+}
+
+enum AccountStatus {
+  ACTIVE
+  ON_HOLD
+  CLOSED
+}
+
+enum DriverStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+}
+
+enum VehicleStatus {
+  ACTIVE
+  MAINTENANCE
+  OFF_ROAD
+}
+
+enum JobStatus {
+  BOOKED // created, not yet allocated
+  ALLOCATED // assigned to a driver/vehicle
+  ON_ROUTE // driver is working the job
+  COMPLETED // all stops done
+  CANCELLED
+  INVOICED
+}
+
+enum StopType {
+  COLLECTION
+  DELIVERY
+}
+
+enum StopStatus {
+  PENDING
+  ARRIVED
+  COMPLETED
+  FAILED
+}
+
+// Day classification used for rate-card matching.
+enum DayType {
+  ANY
+  WEEKDAY
+  SATURDAY
+  SUNDAY
+  BANK_HOLIDAY
+}
+
+// Time-of-day classification used for rate-card matching.
+enum TimeBand {
+  ANY
+  DAYTIME // standard working hours
+  OUT_OF_HOURS // evenings / nights / early mornings
+}
+
+// Whether a rate card sets customer revenue or driver cost.
+enum RateCardKind {
+  CUSTOMER
+  DRIVER
+}
+
+// ---------------------------------------------------------------------------
+// Customers & contacts
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id           String        @id @default(cuid())
+  accountCode  String        @unique
+  name         String
+  status       AccountStatus @default(ACTIVE)
+  email        String?
+  phone        String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  postcode     String?
+  paymentTerms Int           @default(30) // days
+  notes        String?
+
+  contacts  Contact[]
+  jobs      Job[]
+  rateCards RateCard[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Contact {
+  id         String  @id @default(cuid())
+  customerId String
+  name       String
+  email      String?
+  phone      String?
+  role       String?
+  isPrimary  Boolean @default(false)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  jobs     Job[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+}
+
+// ---------------------------------------------------------------------------
+// Fleet & drivers
+// ---------------------------------------------------------------------------
+
+model Vehicle {
+  id           String        @id @default(cuid())
+  registration String        @unique
+  type         VehicleType
+  make         String?
+  model        String?
+  status       VehicleStatus @default(ACTIVE)
+  notes        String?
+
+  jobs    Job[]
+  drivers Driver[] // drivers whose default vehicle this is
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Driver {
+  id               String       @id @default(cuid())
+  name             String
+  email            String?
+  phone            String?
+  status           DriverStatus @default(ACTIVE)
+  licenceNumber    String?
+  defaultVehicleId String?
+  notes            String?
+
+  defaultVehicle Vehicle?   @relation(fields: [defaultVehicleId], references: [id], onDelete: SetNull)
+  jobs           Job[]
+  rateCards      RateCard[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([defaultVehicleId])
+}
+
+// ---------------------------------------------------------------------------
+// Jobs (bookings) & stops (drops)
+// ---------------------------------------------------------------------------
+
+model Job {
+  id        String    @id @default(cuid())
+  reference String    @unique // human-friendly e.g. JOB-2026-0001
+  status    JobStatus @default(BOOKED)
+
+  customerId String
+  contactId  String?
+
+  // Service requirements
+  vehicleType VehicleType
+  serviceDate DateTime // the day the work is performed
+  bookedAt    DateTime @default(now())
+
+  // Allocation
+  driverId  String?
+  vehicleId String?
+
+  // Distance & timing used by the pricing engine
+  distanceMiles Float @default(0)
+  estimatedMins Int   @default(0)
+
+  // Day/time classification captured at booking (drives rate selection)
+  dayType  DayType  @default(WEEKDAY)
+  timeBand TimeBand @default(DAYTIME)
+
+  // Cached pricing (recomputed whenever the job changes materially)
+  customerCharge Float @default(0) // revenue
+  driverCost     Float @default(0) // cost to pay the driver
+  customerRateCardId String?
+  driverRateCardId   String?
+
+  reference_notes String? // operator notes
+  customerRef     String? // customer's own PO / reference
+
+  customer Customer  @relation(fields: [customerId], references: [id])
+  contact  Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  driver   Driver?   @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicle  Vehicle?  @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  stops    Stop[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([driverId])
+  @@index([status])
+  @@index([serviceDate])
+}
+
+model Stop {
+  id       String     @id @default(cuid())
+  jobId    String
+  sequence Int // order within the run, 1-based
+  type     StopType
+  status   StopStatus @default(PENDING)
+
+  name         String? // site / company name
+  addressLine1 String
+  addressLine2 String?
+  city         String?
+  postcode     String
+
+  contactName  String?
+  contactPhone String?
+
+  windowFrom DateTime? // earliest
+  windowTo   DateTime? // latest
+
+  completedAt DateTime?
+  podName     String? // proof of delivery: who signed
+  notes       String?
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([jobId])
+}
+
+// ---------------------------------------------------------------------------
+// Rate cards (pricing engine)
+// ---------------------------------------------------------------------------
+//
+// A rate card can target a specific customer or driver (or be a default when
+// both are null). It can be scoped to a vehicle type, a day type and a time
+// band. The pricing engine selects the most specific matching active card.
+
+model RateCard {
+  id   String       @id @default(cuid())
+  kind RateCardKind
+  name String
+
+  customerId String? // when kind = CUSTOMER and not a global default
+  driverId   String? // when kind = DRIVER and not a global default
+
+  vehicleType VehicleType? // null = applies to any vehicle type
+  dayType     DayType      @default(ANY)
+  timeBand    TimeBand     @default(ANY)
+
+  ratePerMile   Float
+  minimumCharge Float @default(0)
+
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime? // null = open-ended
+
+  active Boolean @default(true)
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  driver   Driver?   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kind])
+  @@index([customerId])
+  @@index([driverId])
+}
