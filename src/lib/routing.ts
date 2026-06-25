@@ -4,14 +4,37 @@ import { haversineMiles } from "./postcode";
 // run in the browser as the operator builds the run.
 
 export const ROAD_FACTOR = 1.3; // straight-line → driving distance
-export const DEFAULT_SPEED_MPH = 30; // mixed urban/A-road average
-export const DEFAULT_DWELL_MIN = 10; // time spent at each stop
+
+export interface RouteProfile {
+  urbanSpeedMph: number; // speed on short (town) legs
+  motorwaySpeedMph: number; // speed on long (trunk/motorway) legs
+  dwellMin: number; // minutes spent at each stop
+}
+
+export const DEFAULT_PROFILE: RouteProfile = {
+  urbanSpeedMph: 18,
+  motorwaySpeedMph: 55,
+  dwellMin: 10,
+};
+
+// Speed for a single leg: short legs are town driving, long legs are mostly
+// motorway. Between 3 and 25 miles we interpolate between the two — so a 2-mile
+// hop is slow and a 60-mile leg runs at motorway speed.
+const URBAN_BELOW = 3;
+const MOTORWAY_ABOVE = 25;
+
+export function legSpeed(miles: number, p: RouteProfile): number {
+  if (miles <= URBAN_BELOW) return p.urbanSpeedMph;
+  if (miles >= MOTORWAY_ABOVE) return p.motorwaySpeedMph;
+  const t = (miles - URBAN_BELOW) / (MOTORWAY_ABOVE - URBAN_BELOW);
+  return p.urbanSpeedMph + t * (p.motorwaySpeedMph - p.urbanSpeedMph);
+}
 
 export interface RoutePoint {
   lat: number | null;
   lng: number | null;
-  requested?: Date | null; // target arrival
-  deadline?: Date | null; // latest acceptable arrival
+  requested?: Date | null;
+  deadline?: Date | null;
 }
 
 export interface LegResult {
@@ -19,26 +42,23 @@ export interface LegResult {
   travelMiles: number;
   travelMin: number;
   arrival: Date | null;
-  late: boolean; // arrival after deadline
-  lateMin: number; // minutes past deadline (0 if ok)
-  waitMin: number; // minutes waiting if we'd arrive before the requested time
+  late: boolean;
+  lateMin: number;
+  waitMin: number;
 }
 
 export interface Itinerary {
   legs: LegResult[];
   totalMiles: number;
-  totalMin: number; // total elapsed from start to last stop completion
+  totalMin: number;
   anyInfeasible: boolean;
 }
 
 export function computeItinerary(
   points: RoutePoint[],
   start: Date | null,
-  opts: { speedMph?: number; dwellMin?: number } = {},
+  profile: RouteProfile = DEFAULT_PROFILE,
 ): Itinerary {
-  const speed = opts.speedMph ?? DEFAULT_SPEED_MPH;
-  const dwell = opts.dwellMin ?? DEFAULT_DWELL_MIN;
-
   const legs: LegResult[] = [];
   let totalMiles = 0;
   let cursor = start ? new Date(start) : null;
@@ -60,14 +80,12 @@ export function computeItinerary(
               ROAD_FACTOR *
               10,
           ) / 10;
-        travelMin = Math.round((travelMiles / speed) * 60);
+        travelMin = Math.round((travelMiles / legSpeed(travelMiles, profile)) * 60);
       }
       totalMiles += travelMiles;
-      // Advance the clock: dwell at the previous stop + travel to this one.
-      if (cursor) cursor = new Date(cursor.getTime() + (dwell + travelMin) * 60000);
+      if (cursor) cursor = new Date(cursor.getTime() + (profile.dwellMin + travelMin) * 60000);
     }
 
-    // If we'd arrive before the requested time, we wait until then.
     let waitMin = 0;
     if (cursor && p.requested && cursor < p.requested) {
       waitMin = Math.round((p.requested.getTime() - cursor.getTime()) / 60000);
@@ -85,8 +103,7 @@ export function computeItinerary(
     legs.push({ index: i, travelMiles, travelMin, arrival, late, lateMin, waitMin });
   }
 
-  const totalMin =
-    start && cursor ? Math.round((cursor.getTime() - start.getTime()) / 60000) : 0;
+  const totalMin = start && cursor ? Math.round((cursor.getTime() - start.getTime()) / 60000) : 0;
 
   return {
     legs,

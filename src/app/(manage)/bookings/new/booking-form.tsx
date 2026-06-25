@@ -12,11 +12,8 @@ import {
   vehicleTypes,
   vehicleTypeLabels,
 } from "@/lib/format";
-import {
-  computeItinerary,
-  DEFAULT_DWELL_MIN,
-  DEFAULT_SPEED_MPH,
-} from "@/lib/routing";
+import { computeItinerary, DEFAULT_PROFILE, RouteProfile } from "@/lib/routing";
+import { RouteMap } from "@/components/route-map";
 
 export interface SavedAddressOption {
   id: string;
@@ -82,10 +79,19 @@ const parseDT = (s: string) => (s ? new Date(s) : null);
 const fmtTime = (d: Date | null) =>
   d ? d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—";
 
-export function BookingForm({ customers }: { customers: CustomerOption[] }) {
+export function BookingForm({
+  customers,
+  profiles,
+}: {
+  customers: CustomerOption[];
+  profiles: Record<string, RouteProfile>;
+}) {
   const [customerId, setCustomerId] = useState(customers[0]?.id ?? "");
+  const [vehicleType, setVehicleType] = useState<string>(vehicleTypes[0]);
   const [serviceDate, setServiceDate] = useState("");
   const [stops, setStops] = useState<StopRow[]>([newStop("COLLECTION"), newStop("DELIVERY")]);
+
+  const profile = profiles[vehicleType] ?? DEFAULT_PROFILE;
 
   const selected = useMemo(() => customers.find((c) => c.id === customerId), [customers, customerId]);
   const contacts = selected?.contacts ?? [];
@@ -148,11 +154,24 @@ export function BookingForm({ customers }: { customers: CustomerOption[] }) {
           deadline: parseDT(s.deadline),
         })),
         start,
+        profile,
       ),
-    [stops, serviceDate],
+    [stops, serviceDate, profile],
   );
 
   const geocodedCount = stops.filter((s) => s.lat != null).length;
+
+  const mapPoints = stops
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => s.lat != null && s.lng != null)
+    .map(({ s, i }) => ({
+      lat: s.lat as number,
+      lng: s.lng as number,
+      type: s.type as "COLLECTION" | "DELIVERY",
+      seq: i + 1,
+      late: itinerary.legs[i]?.late,
+      label: `Stop ${i + 1} · ${s.postcode}`,
+    }));
 
   return (
     <form action={createBooking} className="space-y-6">
@@ -186,10 +205,12 @@ export function BookingForm({ customers }: { customers: CustomerOption[] }) {
               options={serviceLevels.map((s) => ({ value: s, label: serviceLevelLabels[s] }))}
             />
           </Field>
-          <Field label="Vehicle type" required>
+          <Field label="Vehicle type" required hint="Sets routing speeds & dwell">
             <Select
               name="vehicleType"
               required
+              value={vehicleType}
+              onChange={(e) => setVehicleType(e.target.value)}
               options={vehicleTypes.map((v) => ({ value: v, label: vehicleTypeLabels[v] }))}
             />
           </Field>
@@ -264,6 +285,9 @@ export function BookingForm({ customers }: { customers: CustomerOption[] }) {
                     ? "⚠ Deadline not achievable — see flagged stops"
                     : "✓ All deadlines achievable"}
                 </div>
+                <div className="mb-4">
+                  <RouteMap points={mapPoints} height={220} />
+                </div>
                 <ol className="space-y-3">
                   {stops.map((s, i) => {
                     const leg = itinerary.legs[i];
@@ -311,7 +335,8 @@ export function BookingForm({ customers }: { customers: CustomerOption[] }) {
                   </span>
                 </div>
                 <p className="mt-2 text-xs text-slate-400">
-                  Assumes {DEFAULT_SPEED_MPH} mph + {DEFAULT_DWELL_MIN} min per stop.
+                  {vehicleTypeLabels[vehicleType as keyof typeof vehicleTypeLabels]}: {profile.urbanSpeedMph}–
+                  {profile.motorwaySpeedMph} mph by leg + {profile.dwellMin} min/stop.
                 </p>
               </>
             )}

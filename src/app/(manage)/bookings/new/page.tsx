@@ -5,14 +5,25 @@ import { BookingForm } from "./booking-form";
 export const dynamic = "force-dynamic";
 
 export default async function NewBookingPage() {
-  const customers = await prisma.customer.findMany({
-    where: { status: "ACTIVE" },
-    orderBy: { name: "asc" },
-    include: {
-      contacts: { orderBy: [{ isPrimary: "desc" }, { name: "asc" }] },
-      savedAddresses: { orderBy: { label: "asc" } },
-    },
-  });
+  const [customers, profiles] = await Promise.all([
+    prisma.customer.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { name: "asc" },
+      include: {
+        contacts: { orderBy: [{ isPrimary: "desc" }, { name: "asc" }] },
+        savedAddresses: { orderBy: { label: "asc" } },
+      },
+    }),
+    prisma.vehicleTypeProfile.findMany(),
+  ]);
+
+  const profileMap: Record<string, { urbanSpeedMph: number; motorwaySpeedMph: number; dwellMin: number }> =
+    Object.fromEntries(
+      profiles.map((p) => [
+        p.type,
+        { urbanSpeedMph: p.urbanSpeedMph, motorwaySpeedMph: p.motorwaySpeedMph, dwellMin: p.dwellMin },
+      ]),
+    );
 
   return (
     <div>
@@ -21,6 +32,7 @@ export default async function NewBookingPage() {
         <EmptyState message="You need at least one active customer before booking a job." />
       ) : (
         <BookingForm
+          profiles={profileMap}
           customers={customers.map((c) => ({
             id: c.id,
             name: c.name,

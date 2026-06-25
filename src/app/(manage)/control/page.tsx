@@ -113,6 +113,11 @@ export default async function ControlRoomPage({
                         {job.reference}
                       </Link>
                       <div className="text-xs text-slate-400">{formatDateTime(job.serviceDate)}</div>
+                      {job.deadlineRisk && (
+                        <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 ring-1 ring-inset ring-red-200">
+                          ⚠ Deadline risk
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-slate-600">{serviceLevelLabels[job.serviceLevel]}</td>
                     <td className="px-4 py-3 text-slate-700">{job.customer.name}</td>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getCompanySetting } from "@/lib/company";
 import { updateCompanySettings } from "@/actions/company";
 import { Button, Card, Field, Input, PageHeader } from "@/components/ui";
@@ -70,6 +71,21 @@ export default async function SettingsPage() {
           <Button type="submit">Save settings</Button>
         </div>
       </form>
+
+      <Card className="mt-6 flex items-center justify-between p-5">
+        <div>
+          <div className="font-medium text-slate-900">Routing speeds</div>
+          <div className="text-sm text-slate-500">
+            Per-vehicle speeds &amp; dwell used for ETAs and deadline checks.
+          </div>
+        </div>
+        <Link
+          href="/settings/routing"
+          className="rounded-lg bg-white px-3.5 py-2 text-sm font-medium text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+        >
+          Configure →
+        </Link>
+      </Card>
     </div>
   );
 }

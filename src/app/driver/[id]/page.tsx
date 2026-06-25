@@ -41,10 +41,15 @@ export default async function DriverJobPage({
         <JobStatusBadge status={job.status} />
       </div>
       <p className="text-sm text-gray-600">{job.customer.name}</p>
-      <p className="mb-4 text-xs text-gray-500">
+      <p className="mb-3 text-xs text-gray-500">
         {serviceLevelLabels[job.serviceLevel]} · {vehicleTypeLabels[job.vehicleType]}
         {job.reference_notes ? ` · ${job.reference_notes}` : ""}
       </p>
+      {job.deadlineRisk && (
+        <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 ring-1 ring-inset ring-red-200">
+          ⚠ Tight schedule — a delivery deadline may be at risk. Prioritise this run.
+        </div>
+      )}
 
       <ol className="space-y-3">
         {job.stops.map((stop) => {

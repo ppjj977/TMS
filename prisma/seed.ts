@@ -21,6 +21,7 @@ async function main() {
   console.log("Seeding TMS demo data…");
 
   // Clear existing data (idempotent reseed).
+  await prisma.vehicleTypeProfile.deleteMany();
   await prisma.trafficScreen.deleteMany();
   await prisma.companySetting.deleteMany();
   await prisma.notificationLog.deleteMany();
@@ -341,6 +342,20 @@ async function main() {
       { type: "DELIVERY", name: "Stockport Depot", addressLine1: "3 Heaton Lane", city: "Stockport", postcode: "SK4 1AR" },
     ],
   });
+
+  // --- Vehicle routing profiles ----------------------------------------
+  const profiles: { type: any; urbanSpeedMph: number; motorwaySpeedMph: number; dwellMin: number }[] = [
+    { type: "BIKE", urbanSpeedMph: 14, motorwaySpeedMph: 22, dwellMin: 5 },
+    { type: "CAR", urbanSpeedMph: 20, motorwaySpeedMph: 65, dwellMin: 8 },
+    { type: "SMALL_VAN", urbanSpeedMph: 18, motorwaySpeedMph: 60, dwellMin: 10 },
+    { type: "SWB_VAN", urbanSpeedMph: 18, motorwaySpeedMph: 58, dwellMin: 10 },
+    { type: "LWB_VAN", urbanSpeedMph: 17, motorwaySpeedMph: 56, dwellMin: 12 },
+    { type: "LUTON", urbanSpeedMph: 16, motorwaySpeedMph: 52, dwellMin: 15 },
+    { type: "SEVEN_FIVE_TONNE", urbanSpeedMph: 15, motorwaySpeedMph: 50, dwellMin: 20 },
+    { type: "EIGHTEEN_TONNE", urbanSpeedMph: 14, motorwaySpeedMph: 48, dwellMin: 25 },
+    { type: "ARTIC", urbanSpeedMph: 14, motorwaySpeedMph: 50, dwellMin: 30 },
+  ];
+  await prisma.vehicleTypeProfile.createMany({ data: profiles });
 
   // --- Company settings -------------------------------------------------
   await prisma.companySetting.create({

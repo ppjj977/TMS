@@ -49,8 +49,15 @@ export default async function DriverHomePage() {
                     {formatDate(job.serviceDate)} · {serviceLevelLabels[job.serviceLevel]} ·{" "}
                     {vehicleTypeLabels[job.vehicleType]}
                   </div>
-                  <div className="mt-2 text-xs font-medium text-brand-600">
-                    {done}/{job.stops.length} stops done →
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs font-medium text-brand-600">
+                      {done}/{job.stops.length} stops done →
+                    </span>
+                    {job.deadlineRisk && (
+                      <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 ring-1 ring-inset ring-red-200">
+                        ⚠ Tight deadline
+                      </span>
+                    )}
                   </div>
                 </Link>
               </li>

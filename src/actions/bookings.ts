@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { nextJobReference } from "@/lib/reference";
 import { classifyDay, classifyTimeBand, priceJob } from "@/lib/pricing";
 import { lookupPostcode, routeDistanceMiles } from "@/lib/postcode";
+import { computeItinerary, DEFAULT_PROFILE } from "@/lib/routing";
 import { logJobEvent } from "@/lib/events";
 import { advanceJobFromStops } from "@/lib/jobflow";
 import { notifyAllocation, notifyBookingConfirmation, notifyCompletion } from "@/lib/notify";
@@ -134,6 +135,29 @@ async function createJobCore(
 
   const dropCount = stops.filter((s) => s.type === StopType.DELIVERY).length;
 
+  // Deadline feasibility: run the itinerary using the vehicle's routing profile.
+  const profileRow = await prisma.vehicleTypeProfile.findUnique({
+    where: { type: data.vehicleType },
+  });
+  const profile = profileRow
+    ? {
+        urbanSpeedMph: profileRow.urbanSpeedMph,
+        motorwaySpeedMph: profileRow.motorwaySpeedMph,
+        dwellMin: profileRow.dwellMin,
+      }
+    : DEFAULT_PROFILE;
+  const itinerary = computeItinerary(
+    stops.map((s, i) => ({
+      lat: geos[i]?.latitude ?? null,
+      lng: geos[i]?.longitude ?? null,
+      requested: s.windowFrom ? new Date(s.windowFrom) : null,
+      deadline: s.windowTo ? new Date(s.windowTo) : null,
+    })),
+    serviceDate,
+    profile,
+  );
+  const deadlineRisk = itinerary.anyInfeasible;
+
   const pricing = await priceJob({
     vehicleType: data.vehicleType,
     dayType,
@@ -161,6 +185,7 @@ async function createJobCore(
       estimatedMins: data.estimatedMins,
       pieces: data.pieces,
       weightKg: data.weightKg,
+      deadlineRisk,
       customerRef: data.customerRef,
       reference_notes: data.notes,
       customerCharge: pricing.customerCharge,

@@ -301,6 +301,9 @@ model Job {
   pieces  Int   @default(1)
   weightKg Float @default(0)
 
+  // Routing: true if any stop's ETA missed its deadline at booking time.
+  deadlineRisk Boolean @default(false)
+
   // Distance & timing used by the pricing engine
   distanceMiles Float @default(0)
   estimatedMins Int   @default(0)
@@ -544,6 +547,15 @@ model NotificationLog {
 // ---------------------------------------------------------------------------
 // Company settings (singleton) — your own billing identity, used on invoices.
 // ---------------------------------------------------------------------------
+
+// Routing profile per vehicle type: speeds used to estimate ETAs. Short legs
+// use the urban speed, long legs the motorway speed (interpolated between).
+model VehicleTypeProfile {
+  type             VehicleType @id
+  urbanSpeedMph    Float       @default(18)
+  motorwaySpeedMph Float       @default(55)
+  dwellMin         Int         @default(10)
+}
 
 model CompanySetting {
   id           String  @id @default(cuid())
