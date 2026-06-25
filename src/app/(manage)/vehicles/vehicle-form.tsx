@@ -48,6 +48,25 @@ export function VehicleForm({
           </Field>
         </div>
       </Card>
+
+      <Card className="p-5">
+        <h2 className="mb-1 text-lg font-semibold text-slate-900">Routing overrides</h2>
+        <p className="mb-4 text-sm text-slate-500">
+          Optional — leave blank to use the vehicle type&apos;s default speeds. Used to estimate
+          ETAs when this vehicle is allocated.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Urban speed (mph)">
+            <Input type="number" step="1" min="1" name="urbanSpeedMph" defaultValue={vehicle?.urbanSpeedMph ?? ""} placeholder="inherit" />
+          </Field>
+          <Field label="Motorway speed (mph)">
+            <Input type="number" step="1" min="1" name="motorwaySpeedMph" defaultValue={vehicle?.motorwaySpeedMph ?? ""} placeholder="inherit" />
+          </Field>
+          <Field label="Dwell per stop (min)">
+            <Input type="number" step="1" min="0" name="dwellMin" defaultValue={vehicle?.dwellMin ?? ""} placeholder="inherit" />
+          </Field>
+        </div>
+      </Card>
       <div className="flex justify-end">
         <Button type="submit">{vehicle ? "Save changes" : "Create vehicle"}</Button>
       </div>

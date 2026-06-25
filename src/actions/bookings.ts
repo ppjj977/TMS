@@ -9,7 +9,7 @@ import { classifyDay, classifyTimeBand, priceJob } from "@/lib/pricing";
 import { lookupPostcode, routeDistanceMiles } from "@/lib/postcode";
 import { computeItinerary, DEFAULT_PROFILE } from "@/lib/routing";
 import { logJobEvent } from "@/lib/events";
-import { advanceJobFromStops } from "@/lib/jobflow";
+import { advanceJobFromStops, recomputeDeadlineRisk } from "@/lib/jobflow";
 import { notifyAllocation, notifyBookingConfirmation, notifyCompletion } from "@/lib/notify";
 import { getCurrentUser } from "@/lib/auth";
 import {
@@ -305,6 +305,8 @@ export async function allocateJob(jobId: string, formData: FormData) {
   });
 
   await recalc(jobId);
+  // Re-check deadline feasibility using the allocated vehicle's profile.
+  await recomputeDeadlineRisk(jobId);
 
   const actor = await actorName();
   if (!driverId && job.driverId) {

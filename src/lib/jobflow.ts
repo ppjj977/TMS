@@ -2,6 +2,42 @@ import { JobEventType, JobStatus, StopStatus } from "@prisma/client";
 import { prisma } from "./prisma";
 import { logJobEvent } from "./events";
 import { notifyCompletion } from "./notify";
+import { computeItinerary, resolveProfile } from "./routing";
+
+/**
+ * Recompute a job's deadline-risk flag using the allocated vehicle's effective
+ * routing profile (per-vehicle override → vehicle-type profile → defaults).
+ * Returns whether the run is feasible.
+ */
+export async function recomputeDeadlineRisk(jobId: string): Promise<boolean> {
+  const job = await prisma.job.findUnique({
+    where: { id: jobId },
+    include: { stops: { orderBy: { sequence: "asc" } }, vehicle: true },
+  });
+  if (!job) return true;
+
+  const typeProfile = await prisma.vehicleTypeProfile.findUnique({
+    where: { type: job.vehicleType },
+  });
+  const profile = resolveProfile(typeProfile, job.vehicle);
+
+  const itinerary = computeItinerary(
+    job.stops.map((s) => ({
+      lat: s.latitude,
+      lng: s.longitude,
+      requested: s.windowFrom,
+      deadline: s.windowTo,
+    })),
+    job.serviceDate,
+    profile,
+  );
+
+  await prisma.job.update({
+    where: { id: jobId },
+    data: { deadlineRisk: itinerary.anyInfeasible },
+  });
+  return !itinerary.anyInfeasible;
+}
 
 /**
  * Recompute a job's status from its stops and persist any change.

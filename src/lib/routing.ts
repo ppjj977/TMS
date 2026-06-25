@@ -30,6 +30,23 @@ export function legSpeed(miles: number, p: RouteProfile): number {
   return p.urbanSpeedMph + t * (p.motorwaySpeedMph - p.urbanSpeedMph);
 }
 
+// Resolve the effective routing profile: start from defaults, apply the vehicle
+// type's profile, then any per-vehicle overrides (null = inherit).
+export function resolveProfile(
+  typeProfile?: Partial<RouteProfile> | null,
+  vehicleOverride?: {
+    urbanSpeedMph?: number | null;
+    motorwaySpeedMph?: number | null;
+    dwellMin?: number | null;
+  } | null,
+): RouteProfile {
+  const p: RouteProfile = { ...DEFAULT_PROFILE, ...(typeProfile ?? {}) } as RouteProfile;
+  if (vehicleOverride?.urbanSpeedMph != null) p.urbanSpeedMph = vehicleOverride.urbanSpeedMph;
+  if (vehicleOverride?.motorwaySpeedMph != null) p.motorwaySpeedMph = vehicleOverride.motorwaySpeedMph;
+  if (vehicleOverride?.dwellMin != null) p.dwellMin = vehicleOverride.dwellMin;
+  return p;
+}
+
 export interface RoutePoint {
   lat: number | null;
   lng: number | null;

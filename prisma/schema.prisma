@@ -247,6 +247,11 @@ model Vehicle {
   status       VehicleStatus @default(ACTIVE)
   notes        String?
 
+  // Optional routing overrides — null inherits the vehicle type's profile.
+  urbanSpeedMph    Float?
+  motorwaySpeedMph Float?
+  dwellMin         Int?
+
   jobs    Job[]
   drivers Driver[] // drivers whose default vehicle this is
 
