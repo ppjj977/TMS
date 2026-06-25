@@ -195,6 +195,7 @@ model Customer {
   savedAddresses SavedAddress[]
   quotes         Quote[]
   fixedPrices    FixedPrice[]
+  recurringJobs  RecurringJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -337,14 +338,18 @@ model Job {
   // Invoicing
   invoiceId String?
 
+  // Source recurring template (if generated from one)
+  recurringJobId String?
+
   customer Customer   @relation(fields: [customerId], references: [id])
   contact  Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
   driver   Driver?    @relation(fields: [driverId], references: [id], onDelete: SetNull)
   vehicle  Vehicle?   @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
-  invoice  Invoice?   @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  stops    Stop[]
-  events   JobEvent[]
-  supplements JobSupplement[]
+  invoice      Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  recurringJob RecurringJob?  @relation(fields: [recurringJobId], references: [id], onDelete: SetNull)
+  stops        Stop[]
+  events       JobEvent[]
+  supplements  JobSupplement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -561,6 +566,59 @@ model NotificationLog {
 // ---------------------------------------------------------------------------
 // Company settings (singleton) — your own billing identity, used on invoices.
 // ---------------------------------------------------------------------------
+
+// A standing/recurring job template that generates bookings on a weekly schedule.
+model RecurringJob {
+  id           String       @id @default(cuid())
+  name         String
+  customerId   String
+  vehicleType  VehicleType
+  serviceLevel ServiceLevel @default(SAMEDAY_STANDARD)
+  pieces       Int          @default(1)
+  weightKg     Float        @default(0)
+  startHour    Int          @default(9)
+  startMinute  Int          @default(0)
+  notes        String?
+
+  mon Boolean @default(false)
+  tue Boolean @default(false)
+  wed Boolean @default(false)
+  thu Boolean @default(false)
+  fri Boolean @default(false)
+  sat Boolean @default(false)
+  sun Boolean @default(false)
+
+  active Boolean @default(true)
+
+  customer Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  stops    RecurringStop[]
+  jobs     Job[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+}
+
+model RecurringStop {
+  id             String   @id @default(cuid())
+  recurringJobId String
+  sequence       Int
+  type           StopType
+  name           String?
+  addressLine1   String
+  addressLine2   String?
+  city           String?
+  postcode       String
+  contactName    String?
+  contactPhone   String?
+  latitude       Float?
+  longitude      Float?
+
+  recurringJob RecurringJob @relation(fields: [recurringJobId], references: [id], onDelete: Cascade)
+
+  @@index([recurringJobId])
+}
 
 // Fixed price for a postcode-area → postcode-area journey (outward codes, e.g.
 // "M17" → "LS12"). When matched it replaces distance-based pricing.

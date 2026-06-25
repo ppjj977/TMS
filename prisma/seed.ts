@@ -21,6 +21,8 @@ async function main() {
   console.log("Seeding TMS demo data…");
 
   // Clear existing data (idempotent reseed).
+  await prisma.recurringStop.deleteMany();
+  await prisma.recurringJob.deleteMany();
   await prisma.jobSupplement.deleteMany();
   await prisma.fixedPrice.deleteMany();
   await prisma.autoSupplementRule.deleteMany();
@@ -212,6 +214,24 @@ async function main() {
       { name: "Out of hours", type: "OUT_OF_HOURS", amount: 15, oohStartHour: 8, oohEndHour: 18, appliesWeekend: true },
       { name: "London ULEZ", type: "POSTCODE", amount: 12.5, outcodes: "EC1,EC2,EC3,EC4,WC1,WC2,W1,SW1,N1,SE1" },
     ],
+  });
+
+  // Demo standing job: Acme daily run Mon–Fri.
+  await prisma.recurringJob.create({
+    data: {
+      name: "Daily Acme → Bolton",
+      customerId: acme.id,
+      vehicleType: "SMALL_VAN",
+      pieces: 4,
+      startHour: 9,
+      mon: true, tue: true, wed: true, thu: true, fri: true,
+      stops: {
+        create: [
+          { sequence: 1, type: "COLLECTION", name: "Acme Components Ltd", addressLine1: "Unit 4, Trafford Park", city: "Manchester", postcode: "M17 1AB", latitude: 53.4673, longitude: -2.3275 },
+          { sequence: 2, type: "DELIVERY", name: "Northern Assembly", addressLine1: "8 Mill Lane", city: "Bolton", postcode: "BL1 4RT", latitude: 53.5853, longitude: -2.4329 },
+        ],
+      },
+    },
   });
 
   // --- Jobs (bookings) --------------------------------------------------
