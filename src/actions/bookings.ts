@@ -6,12 +6,24 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { nextJobReference } from "@/lib/reference";
 import { classifyDay, classifyTimeBand, priceJob } from "@/lib/pricing";
+import { lookupPostcode, routeDistanceMiles } from "@/lib/postcode";
+import { logJobEvent } from "@/lib/events";
+import { advanceJobFromStops } from "@/lib/jobflow";
+import { notifyAllocation, notifyBookingConfirmation, notifyCompletion } from "@/lib/notify";
+import { getCurrentUser } from "@/lib/auth";
 import {
+  JobEventType,
   JobStatus,
+  ServiceLevel,
   StopStatus,
   StopType,
   VehicleType,
 } from "@prisma/client";
+
+async function actorName(): Promise<string> {
+  const user = await getCurrentUser();
+  return user?.name ?? "system";
+}
 
 // ---------------------------------------------------------------------------
 // Create booking (multi-drop)
@@ -69,6 +81,7 @@ const bookingSchema = z.object({
   customerId: z.string().trim().min(1, "Customer is required"),
   contactId: z.string().trim().optional(),
   vehicleType: z.nativeEnum(VehicleType),
+  serviceLevel: z.nativeEnum(ServiceLevel).default(ServiceLevel.SAMEDAY_STANDARD),
   serviceDate: z.string().trim().min(1, "Service date is required"),
   distanceMiles: z.coerce.number().min(0).default(0),
   estimatedMins: z.coerce.number().int().min(0).default(0),
@@ -76,11 +89,17 @@ const bookingSchema = z.object({
   notes: z.string().trim().optional(),
 });
 
-export async function createBooking(formData: FormData) {
+// Shared booking-creation core used by both the operator screen and the
+// customer portal. Returns the new job id; callers handle redirects.
+async function createJobCore(
+  formData: FormData,
+  overrides: { customerId?: string } = {},
+): Promise<string> {
   const data = bookingSchema.parse({
-    customerId: formData.get("customerId"),
+    customerId: overrides.customerId ?? formData.get("customerId"),
     contactId: formData.get("contactId") || undefined,
     vehicleType: formData.get("vehicleType"),
+    serviceLevel: formData.get("serviceLevel") || undefined,
     serviceDate: formData.get("serviceDate"),
     distanceMiles: formData.get("distanceMiles") || 0,
     estimatedMins: formData.get("estimatedMins") || 0,
@@ -97,12 +116,24 @@ export async function createBooking(formData: FormData) {
   const dayType = classifyDay(serviceDate);
   const timeBand = classifyTimeBand(serviceDate);
 
+  // Geocode each stop's postcode (fails soft to null if unreachable).
+  const geos = await Promise.all(stops.map((s) => lookupPostcode(s.postcode)));
+
+  // If the operator didn't enter a distance, estimate it from the route.
+  let distanceMiles = data.distanceMiles;
+  if (distanceMiles === 0) {
+    const estimated = routeDistanceMiles(
+      geos.map((g) => (g ? { latitude: g.latitude, longitude: g.longitude } : null)),
+    );
+    if (estimated > 0) distanceMiles = estimated;
+  }
+
   const pricing = await priceJob({
     vehicleType: data.vehicleType,
     dayType,
     timeBand,
     serviceDate,
-    distanceMiles: data.distanceMiles,
+    distanceMiles,
     customerId: data.customerId,
   });
 
@@ -115,9 +146,10 @@ export async function createBooking(formData: FormData) {
       contactId: data.contactId || null,
       vehicleType: data.vehicleType,
       serviceDate,
+      serviceLevel: data.serviceLevel,
       dayType,
       timeBand,
-      distanceMiles: data.distanceMiles,
+      distanceMiles,
       estimatedMins: data.estimatedMins,
       customerRef: data.customerRef,
       reference_notes: data.notes,
@@ -132,8 +164,10 @@ export async function createBooking(formData: FormData) {
           name: s.name,
           addressLine1: s.addressLine1,
           addressLine2: s.addressLine2,
-          city: s.city,
+          city: s.city || geos[i]?.town || null,
           postcode: s.postcode.toUpperCase(),
+          latitude: geos[i]?.latitude ?? null,
+          longitude: geos[i]?.longitude ?? null,
           contactName: s.contactName,
           contactPhone: s.contactPhone,
           windowFrom: s.windowFrom ? new Date(s.windowFrom) : null,
@@ -144,9 +178,27 @@ export async function createBooking(formData: FormData) {
     },
   });
 
+  await logJobEvent(job.id, JobEventType.CREATED, `Booking created (${stops.length} stops)`, await actorName());
+  await notifyBookingConfirmation(job.id);
+
   revalidatePath("/bookings");
   revalidatePath("/");
-  redirect(`/bookings/${job.id}`);
+  return job.id;
+}
+
+/** Operator-side booking creation. */
+export async function createBooking(formData: FormData) {
+  const jobId = await createJobCore(formData);
+  redirect(`/bookings/${jobId}`);
+}
+
+/** Customer-portal booking: customer is forced to the logged-in account. */
+export async function createPortalBooking(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user?.customerId) redirect("/login");
+  const jobId = await createJobCore(formData, { customerId: user.customerId });
+  revalidatePath("/portal");
+  redirect(`/portal/${jobId}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -195,11 +247,16 @@ export async function allocateJob(jobId: string, formData: FormData) {
     vehicleId = driver?.defaultVehicleId ?? null;
   }
 
-  const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+  const job = await prisma.job.findUniqueOrThrow({
+    where: { id: jobId },
+    include: { driver: true },
+  });
   // Allocating moves BOOKED -> ALLOCATED; clearing a driver reverts to BOOKED.
   let status = job.status;
   if (driverId && job.status === JobStatus.BOOKED) status = JobStatus.ALLOCATED;
   if (!driverId && job.status === JobStatus.ALLOCATED) status = JobStatus.BOOKED;
+
+  const newlyAllocated = !!driverId && driverId !== job.driverId;
 
   await prisma.job.update({
     where: { id: jobId },
@@ -207,13 +264,34 @@ export async function allocateJob(jobId: string, formData: FormData) {
   });
 
   await recalc(jobId);
+
+  const actor = await actorName();
+  if (!driverId && job.driverId) {
+    await logJobEvent(jobId, JobEventType.UNALLOCATED, "Driver unassigned", actor);
+  } else if (newlyAllocated) {
+    const driver = await prisma.driver.findUnique({ where: { id: driverId } });
+    await logJobEvent(jobId, JobEventType.ALLOCATED, `Allocated to ${driver?.name ?? "driver"}`, actor);
+    await notifyAllocation(jobId);
+  }
+
   revalidatePath(`/bookings/${jobId}`);
   revalidatePath("/allocation");
   revalidatePath("/");
 }
 
 export async function updateJobStatus(jobId: string, status: JobStatus) {
+  const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId } });
+  if (job.status === status) return;
+
   await prisma.job.update({ where: { id: jobId }, data: { status } });
+  await logJobEvent(
+    jobId,
+    JobEventType.STATUS_CHANGE,
+    `Status ${job.status} → ${status}`,
+    await actorName(),
+  );
+  if (status === JobStatus.COMPLETED) await notifyCompletion(jobId);
+
   revalidatePath(`/bookings/${jobId}`);
   revalidatePath("/bookings");
   revalidatePath("/allocation");
@@ -225,6 +303,7 @@ export async function cancelJob(jobId: string) {
     where: { id: jobId },
     data: { status: JobStatus.CANCELLED },
   });
+  await logJobEvent(jobId, JobEventType.STATUS_CHANGE, "Job cancelled", await actorName());
   revalidatePath(`/bookings/${jobId}`);
   revalidatePath("/bookings");
   revalidatePath("/");
@@ -239,7 +318,7 @@ export async function updateStopStatus(
   jobId: string,
   status: StopStatus,
 ) {
-  await prisma.stop.update({
+  const stop = await prisma.stop.update({
     where: { id: stopId },
     data: {
       status,
@@ -247,33 +326,64 @@ export async function updateStopStatus(
     },
   });
 
-  // Auto-advance the parent job: any stop touched -> ON_ROUTE; all done -> COMPLETED.
-  const job = await prisma.job.findUniqueOrThrow({
-    where: { id: jobId },
-    include: { stops: true },
-  });
-
-  const allDone = job.stops.every(
-    (s) => s.status === StopStatus.COMPLETED || s.status === StopStatus.FAILED,
-  );
-  const anyActive = job.stops.some(
-    (s) => s.status === StopStatus.ARRIVED || s.status === StopStatus.COMPLETED,
+  const actor = await actorName();
+  await logJobEvent(
+    jobId,
+    JobEventType.STOP_UPDATE,
+    `Stop ${stop.sequence} (${stop.postcode}) marked ${status.toLowerCase()}`,
+    actor,
   );
 
-  let newStatus = job.status;
-  if (allDone && job.status !== JobStatus.INVOICED) {
-    newStatus = JobStatus.COMPLETED;
-  } else if (
-    anyActive &&
-    (job.status === JobStatus.ALLOCATED || job.status === JobStatus.BOOKED)
-  ) {
-    newStatus = JobStatus.ON_ROUTE;
-  }
-
-  if (newStatus !== job.status) {
-    await prisma.job.update({ where: { id: jobId }, data: { status: newStatus } });
-  }
+  await advanceJobFromStops(jobId, actor);
 
   revalidatePath(`/bookings/${jobId}`);
+  revalidatePath("/driver");
+  revalidatePath("/");
+}
+
+// ---------------------------------------------------------------------------
+// Proof of delivery
+// ---------------------------------------------------------------------------
+
+const podSchema = z.object({
+  podName: z.string().trim().min(1, "A name is required"),
+  podNotes: z.string().trim().optional(),
+  podSignature: z.string().trim().optional(), // base64 data URL
+  podPhoto: z.string().trim().optional(),
+});
+
+export async function capturePod(stopId: string, jobId: string, formData: FormData) {
+  const data = podSchema.parse({
+    podName: formData.get("podName"),
+    podNotes: formData.get("podNotes") || undefined,
+    podSignature: formData.get("podSignature") || undefined,
+    podPhoto: formData.get("podPhoto") || undefined,
+  });
+
+  const stop = await prisma.stop.update({
+    where: { id: stopId },
+    data: {
+      status: StopStatus.COMPLETED,
+      completedAt: new Date(),
+      podName: data.podName,
+      podNotes: data.podNotes,
+      podSignature: data.podSignature,
+      podPhoto: data.podPhoto,
+    },
+  });
+
+  const actor = await actorName();
+  await logJobEvent(
+    jobId,
+    JobEventType.POD_CAPTURED,
+    `POD captured at stop ${stop.sequence} — signed by ${data.podName}`,
+    actor,
+  );
+
+  await advanceJobFromStops(jobId, actor);
+
+  revalidatePath(`/bookings/${jobId}`);
+  revalidatePath("/driver");
+  revalidatePath(`/driver/${jobId}`);
   revalidatePath("/");
 }

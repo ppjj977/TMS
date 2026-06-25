@@ -46,6 +46,7 @@ export default async function BookingDetailPage({
       driver: true,
       vehicle: true,
       stops: { orderBy: { sequence: "asc" } },
+      events: { orderBy: { createdAt: "desc" } },
     },
   });
 
@@ -165,6 +166,23 @@ export default async function BookingDetailPage({
                           </div>
                         )}
                         {stop.notes && <div className="mt-1 text-xs text-gray-500">{stop.notes}</div>}
+                        {stop.completedAt && (
+                          <div className="mt-2 rounded-md bg-green-50 p-2 text-xs text-green-800 ring-1 ring-inset ring-green-200">
+                            <div className="font-medium">
+                              POD · {formatDateTime(stop.completedAt)}
+                            </div>
+                            {stop.podName && <div>Signed by {stop.podName}</div>}
+                            {stop.podNotes && <div>{stop.podNotes}</div>}
+                            {stop.podSignature && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={stop.podSignature}
+                                alt="Signature"
+                                className="mt-1 h-16 rounded border border-green-200 bg-white"
+                              />
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-col gap-1">
@@ -275,6 +293,27 @@ export default async function BookingDetailPage({
                 strong
               />
             </dl>
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="mb-3 text-lg font-semibold">Timeline</h2>
+            {job.events.length === 0 ? (
+              <p className="text-sm text-gray-500">No activity yet.</p>
+            ) : (
+              <ol className="space-y-3">
+                {job.events.map((ev) => (
+                  <li key={ev.id} className="flex gap-3 text-sm">
+                    <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-brand-500" />
+                    <div>
+                      <div className="text-gray-900">{ev.message}</div>
+                      <div className="text-xs text-gray-400">
+                        {formatDateTime(ev.createdAt)} · {ev.actor}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
           </Card>
         </div>
       </div>

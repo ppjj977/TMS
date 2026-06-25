@@ -6,6 +6,7 @@ import {
   AccountStatus,
   DriverStatus,
   VehicleStatus,
+  InvoiceStatus,
 } from "@prisma/client";
 import {
   jobStatusLabels,
@@ -13,6 +14,7 @@ import {
   accountStatusLabels,
   driverStatusLabels,
   vehicleStatusLabels,
+  invoiceStatusLabels,
 } from "@/lib/format";
 
 // ---------------------------------------------------------------------------
@@ -96,6 +98,17 @@ const vehicleStatusColor: Record<VehicleStatus, keyof typeof tone> = {
 
 export function VehicleStatusBadge({ status }: { status: VehicleStatus }) {
   return <Badge color={vehicleStatusColor[status]}>{vehicleStatusLabels[status]}</Badge>;
+}
+
+const invoiceStatusColor: Record<InvoiceStatus, keyof typeof tone> = {
+  DRAFT: "gray",
+  SENT: "blue",
+  PAID: "green",
+  VOID: "red",
+};
+
+export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
+  return <Badge color={invoiceStatusColor[status]}>{invoiceStatusLabels[status]}</Badge>;
 }
 
 // ---------------------------------------------------------------------------

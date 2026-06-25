@@ -2,8 +2,10 @@ import {
   AccountStatus,
   DayType,
   DriverStatus,
+  InvoiceStatus,
   JobStatus,
   RateCardKind,
+  ServiceLevel,
   StopStatus,
   StopType,
   TimeBand,
@@ -146,6 +148,20 @@ export const rateCardKindLabels: Record<RateCardKind, string> = {
   DRIVER: "Driver (cost)",
 };
 
+export const serviceLevelLabels: Record<ServiceLevel, string> = {
+  SAMEDAY_DIRECT: "Same-day direct",
+  SAMEDAY_STANDARD: "Same-day standard",
+  TIMED: "Timed delivery",
+  OVERNIGHT: "Overnight",
+};
+
+export const invoiceStatusLabels: Record<InvoiceStatus, string> = {
+  DRAFT: "Draft",
+  SENT: "Sent",
+  PAID: "Paid",
+  VOID: "Void",
+};
+
 // Convenience arrays for building <select> options.
 export const vehicleTypes = Object.keys(vehicleTypeLabels) as VehicleType[];
 export const jobStatuses = Object.keys(jobStatusLabels) as JobStatus[];
@@ -156,3 +172,5 @@ export const vehicleStatuses = Object.keys(vehicleStatusLabels) as VehicleStatus
 export const dayTypes = Object.keys(dayTypeLabels) as DayType[];
 export const timeBands = Object.keys(timeBandLabels) as TimeBand[];
 export const rateCardKinds = Object.keys(rateCardKindLabels) as RateCardKind[];
+export const serviceLevels = Object.keys(serviceLevelLabels) as ServiceLevel[];
+export const invoiceStatuses = Object.keys(invoiceStatusLabels) as InvoiceStatus[];

@@ -1,6 +1,7 @@
 import { PrismaClient, StopType } from "@prisma/client";
 import { classifyDay, classifyTimeBand, priceJob } from "../src/lib/pricing";
 import { nextJobReference } from "../src/lib/reference";
+import { hashPassword } from "../src/lib/password";
 
 const prisma = new PrismaClient();
 
@@ -8,9 +9,14 @@ async function main() {
   console.log("Seeding TMS demo data…");
 
   // Clear existing data (idempotent reseed).
+  await prisma.notificationLog.deleteMany();
+  await prisma.jobEvent.deleteMany();
+  await prisma.invoiceLine.deleteMany();
   await prisma.stop.deleteMany();
   await prisma.job.deleteMany();
+  await prisma.invoice.deleteMany();
   await prisma.rateCard.deleteMany();
+  await prisma.user.deleteMany();
   await prisma.contact.deleteMany();
   await prisma.driver.deleteMany();
   await prisma.vehicle.deleteMany();
@@ -63,6 +69,31 @@ async function main() {
       paymentTerms: 14,
       contacts: { create: [{ name: "Tom Fielding", role: "Operations", email: "tom@brightlog.example", isPrimary: true }] },
     },
+  });
+
+  // --- Users (auth) -----------------------------------------------------
+  // All demo users share the password "password".
+  const pw = hashPassword("password");
+  await prisma.user.createMany({
+    data: [
+      { email: "admin@tms.example", name: "Alex Admin", role: "ADMIN", passwordHash: pw },
+      { email: "ops@tms.example", name: "Olivia Operator", role: "OPERATOR", passwordHash: pw },
+    ],
+  });
+  await prisma.user.create({
+    data: { email: "dave@tms.example", name: dave.name, role: "DRIVER", passwordHash: pw, driverId: dave.id },
+  });
+  await prisma.user.create({
+    data: { email: "sam@tms.example", name: sam.name, role: "DRIVER", passwordHash: pw, driverId: sam.id },
+  });
+  await prisma.user.create({
+    data: { email: "priya@tms.example", name: priya.name, role: "DRIVER", passwordHash: pw, driverId: priya.id },
+  });
+  await prisma.user.create({
+    data: { email: "janet@acme.example", name: "Janet Cole", role: "CUSTOMER", passwordHash: pw, customerId: acme.id },
+  });
+  await prisma.user.create({
+    data: { email: "tom@brightlog.example", name: "Tom Fielding", role: "CUSTOMER", passwordHash: pw, customerId: brightLogistics.id },
   });
 
   // --- Rate cards -------------------------------------------------------

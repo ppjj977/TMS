@@ -92,6 +92,45 @@ enum RateCardKind {
   DRIVER
 }
 
+enum Role {
+  ADMIN
+  OPERATOR
+  DRIVER
+  CUSTOMER
+}
+
+enum ServiceLevel {
+  SAMEDAY_DIRECT // dedicated, straight there
+  SAMEDAY_STANDARD // same-day multi-drop
+  TIMED // delivered within a booked window
+  OVERNIGHT // next working day
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  VOID
+}
+
+// A recorded event against a job (status change, allocation, POD, etc.).
+enum JobEventType {
+  CREATED
+  ALLOCATED
+  UNALLOCATED
+  STATUS_CHANGE
+  STOP_UPDATE
+  POD_CAPTURED
+  INVOICED
+  NOTE
+}
+
+enum NotificationStatus {
+  SENT // handed to SMTP
+  LOGGED // no SMTP configured; recorded only
+  FAILED
+}
+
 // ---------------------------------------------------------------------------
 // Customers & contacts
 // ---------------------------------------------------------------------------
@@ -113,6 +152,8 @@ model Customer {
   contacts  Contact[]
   jobs      Job[]
   rateCards RateCard[]
+  users     User[]
+  invoices  Invoice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -169,6 +210,7 @@ model Driver {
   defaultVehicle Vehicle?   @relation(fields: [defaultVehicleId], references: [id], onDelete: SetNull)
   jobs           Job[]
   rateCards      RateCard[]
+  user           User?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -189,9 +231,10 @@ model Job {
   contactId  String?
 
   // Service requirements
-  vehicleType VehicleType
-  serviceDate DateTime // the day the work is performed
-  bookedAt    DateTime @default(now())
+  vehicleType  VehicleType
+  serviceLevel ServiceLevel @default(SAMEDAY_STANDARD)
+  serviceDate  DateTime // the day the work is performed
+  bookedAt     DateTime     @default(now())
 
   // Allocation
   driverId  String?
@@ -214,11 +257,16 @@ model Job {
   reference_notes String? // operator notes
   customerRef     String? // customer's own PO / reference
 
-  customer Customer  @relation(fields: [customerId], references: [id])
-  contact  Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  driver   Driver?   @relation(fields: [driverId], references: [id], onDelete: SetNull)
-  vehicle  Vehicle?  @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  // Invoicing
+  invoiceId String?
+
+  customer Customer   @relation(fields: [customerId], references: [id])
+  contact  Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  driver   Driver?    @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicle  Vehicle?   @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  invoice  Invoice?   @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   stops    Stop[]
+  events   JobEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -227,6 +275,7 @@ model Job {
   @@index([driverId])
   @@index([status])
   @@index([serviceDate])
+  @@index([invoiceId])
 }
 
 model Stop {
@@ -245,12 +294,19 @@ model Stop {
   contactName  String?
   contactPhone String?
 
+  // Geocode (from postcode lookup) used for distance estimation & mapping.
+  latitude  Float?
+  longitude Float?
+
   windowFrom DateTime? // earliest
   windowTo   DateTime? // latest
 
-  completedAt DateTime?
-  podName     String? // proof of delivery: who signed
-  notes       String?
+  completedAt  DateTime?
+  podName      String? // proof of delivery: who signed
+  podSignature String? // base64 PNG data URL of captured signature
+  podPhoto     String? // base64 data URL / URL of a delivery photo
+  podNotes     String?
+  notes        String?
 
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
@@ -297,4 +353,104 @@ model RateCard {
   @@index([kind])
   @@index([customerId])
   @@index([driverId])
+}
+
+// ---------------------------------------------------------------------------
+// Users & authentication
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  name         String
+  role         Role    @default(OPERATOR)
+  active       Boolean @default(true)
+
+  // Optional links that scope what a user can see.
+  driverId   String? @unique // DRIVER users map to a driver record
+  customerId String? // CUSTOMER users belong to a customer account
+
+  driver   Driver?   @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+}
+
+// ---------------------------------------------------------------------------
+// Job event audit trail
+// ---------------------------------------------------------------------------
+
+model JobEvent {
+  id      String       @id @default(cuid())
+  jobId   String
+  type    JobEventType
+  message String
+  actor   String? // who/what triggered it (user name / "system" / driver)
+
+  createdAt DateTime @default(now())
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
+// ---------------------------------------------------------------------------
+// Invoicing
+// ---------------------------------------------------------------------------
+
+model Invoice {
+  id         String        @id @default(cuid())
+  number     String        @unique // e.g. INV-2026-0001
+  customerId String
+  status     InvoiceStatus @default(DRAFT)
+
+  issueDate DateTime @default(now())
+  dueDate   DateTime
+  subtotal  Float    @default(0)
+  total     Float    @default(0)
+  notes     String?
+
+  customer Customer      @relation(fields: [customerId], references: [id])
+  lines    InvoiceLine[]
+  jobs     Job[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  jobId       String?
+  description String
+  amount      Float
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Notification log (email + future channels)
+// ---------------------------------------------------------------------------
+
+model NotificationLog {
+  id        String             @id @default(cuid())
+  channel   String             @default("email")
+  to        String
+  subject   String
+  body      String
+  status    NotificationStatus
+  error     String?
+  jobId     String?
+  createdAt DateTime           @default(now())
+
+  @@index([jobId])
 }

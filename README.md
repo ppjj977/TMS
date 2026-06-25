@@ -26,6 +26,38 @@ track live job status from a management dashboard.
   is shown. The most specific matching card wins (owner › vehicle › day › time).
 - **Status tracking** — jobs flow `Booked → Allocated → On route → Completed →
   Invoiced`; stops are progressed individually and roll the job status forward.
+- **Service levels** — same-day direct / same-day standard / timed / overnight.
+- **Authentication & roles** — login with four roles: **admin** & **operator**
+  (management back-office), **driver** (driver app), **customer** (portal).
+- **Proof of delivery & timeline** — capture a signature (on-screen), signer
+  name and notes per stop; every status change is recorded to a timestamped
+  **audit timeline** shown on the job, the portal and the driver app.
+- **Driver web app** (`/driver`) — mobile-friendly. Drivers see their allocated
+  jobs, tap-to-call/-map each stop, mark arrived/failed and capture POD.
+- **Customer portal** (`/portal`) — customers self-serve book jobs against their
+  account (priced on their rate card) and track their own deliveries live.
+- **Invoicing** (`/invoices`) — generate invoices from completed, un-invoiced
+  jobs per customer (one line per job), with numbering, due dates from the
+  account's payment terms, and a draft → sent → paid (or void) workflow.
+- **Postcode lookup & auto-distance** — postcode → town/region autofill and
+  geocoding via the free [postcodes.io](https://postcodes.io) API (no key). Job
+  distance is auto-estimated from the route when left at 0. Pluggable: swap in a
+  house-level address provider in `src/lib/postcode.ts`.
+- **Email notifications** — booking confirmation, allocation and completion
+  emails. Uses SMTP when configured (see `.env.example`); otherwise every
+  message is recorded to the `NotificationLog` table and logged to the console,
+  so nothing is lost before SMTP is set up.
+
+## Demo logins
+
+After seeding, all demo users share the password **`password`**:
+
+| Email | Role |
+| --- | --- |
+| `admin@tms.example` | Admin (management) |
+| `ops@tms.example` | Operator (management) |
+| `dave@tms.example` | Driver (driver app) |
+| `janet@acme.example` | Customer (portal) |
 
 ## Tech stack
 
@@ -81,13 +113,24 @@ Open http://localhost:3000.
 
 ```
 Customer ─┬─ Contact
-          └─ Job ─── Stop (multi-drop)
-                │
-                ├── Driver ── Vehicle (default)
-                └── Vehicle
+          ├─ User (CUSTOMER role)
+          ├─ Invoice ── InvoiceLine
+          └─ Job ─┬─ Stop (multi-drop, with geocode + POD)
+                  ├─ JobEvent (audit timeline)
+                  ├─ Driver ── Vehicle (default), User (DRIVER role)
+                  ├─ Vehicle
+                  └─ Invoice
 
 RateCard (CUSTOMER | DRIVER) → scoped by owner / vehicle type / day / time
+NotificationLog → every email sent or logged
 ```
 
-See `prisma/schema.prisma` for the full schema and `src/lib/pricing.ts` for the
-pricing engine.
+See `prisma/schema.prisma` for the full schema, `src/lib/pricing.ts` for the
+pricing engine, `src/lib/auth.ts` for sessions/roles and `src/lib/postcode.ts`
+for postcode lookup.
+
+> **Note on outbound network:** postcode lookup (postcodes.io) and SMTP email
+> need outbound internet access from wherever the app runs. Both fail soft — if
+> the network is unavailable the app falls back to manual address entry and to
+> logging notifications — so the system is fully usable offline during
+> development.
