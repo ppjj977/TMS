@@ -176,6 +176,13 @@ export const accountTypeLabels: Record<AccountType, string> = {
   CREDIT: "Credit",
 };
 
+export const quoteStatusLabels: Record<string, string> = {
+  DRAFT: "Draft",
+  SENT: "Sent",
+  CONVERTED: "Converted",
+  EXPIRED: "Expired",
+};
+
 // Convenience arrays for building <select> options.
 export const vehicleTypes = Object.keys(vehicleTypeLabels) as VehicleType[];
 export const jobStatuses = Object.keys(jobStatusLabels) as JobStatus[];

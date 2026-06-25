@@ -150,6 +150,13 @@ enum AccountType {
   CREDIT
 }
 
+enum QuoteStatus {
+  DRAFT
+  SENT
+  CONVERTED
+  EXPIRED
+}
+
 // ---------------------------------------------------------------------------
 // Customers & contacts
 // ---------------------------------------------------------------------------
@@ -180,6 +187,7 @@ model Customer {
   users          User[]
   invoices       Invoice[]
   savedAddresses SavedAddress[]
+  quotes         Quote[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -555,6 +563,40 @@ model CompanySetting {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Quotes
+// ---------------------------------------------------------------------------
+
+model Quote {
+  id           String      @id @default(cuid())
+  reference    String      @unique // QUO-2026-0001
+  customerId   String?
+  customerName String? // for ad-hoc quotes without an account
+  vehicleType  VehicleType
+  serviceLevel ServiceLevel @default(SAMEDAY_STANDARD)
+
+  collectionPostcode String?
+  deliveryPostcode   String?
+  distanceMiles      Float  @default(0)
+  drops              Int    @default(1)
+  pieces             Int    @default(1)
+
+  amount       Float       @default(0)
+  rateCardName String?
+  status       QuoteStatus @default(DRAFT)
+  notes        String?
+
+  convertedJobId String?
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
 }
 
 // ---------------------------------------------------------------------------

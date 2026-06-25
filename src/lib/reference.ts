@@ -31,3 +31,14 @@ export async function nextInvoiceNumber(now: Date = new Date()): Promise<string>
   return `INV-${year}-${seq}`;
 }
 
+/** Generate the next quote number, e.g. QUO-2026-0042. */
+export async function nextQuoteNumber(now: Date = new Date()): Promise<string> {
+  const year = now.getFullYear();
+  const start = new Date(year, 0, 1);
+  const end = new Date(year + 1, 0, 1);
+  const count = await prisma.quote.count({
+    where: { createdAt: { gte: start, lt: end } },
+  });
+  return `QUO-${year}-${String(count + 1).padStart(4, "0")}`;
+}
+

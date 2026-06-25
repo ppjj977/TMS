@@ -15,6 +15,7 @@ const sections: Section[] = [
       { href: "/", label: "Dashboard", icon: "dashboard" },
       { href: "/control", label: "Control Room", icon: "control" },
       { href: "/map", label: "Live map", icon: "mapPin" },
+      { href: "/quotes", label: "Quotes", icon: "pound" },
       { href: "/bookings", label: "Bookings", icon: "bookings" },
       { href: "/allocation", label: "Allocation", icon: "allocation" },
     ],
