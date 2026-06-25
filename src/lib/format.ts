@@ -1,7 +1,9 @@
 import {
   AccountStatus,
+  AccountType,
   DayType,
   DriverStatus,
+  InvoiceSchedule,
   InvoiceStatus,
   JobStatus,
   RateCardKind,
@@ -162,6 +164,18 @@ export const invoiceStatusLabels: Record<InvoiceStatus, string> = {
   VOID: "Void",
 };
 
+export const invoiceScheduleLabels: Record<InvoiceSchedule, string> = {
+  ON_COMPLETION: "On completion",
+  WEEKLY: "Weekly",
+  FORTNIGHTLY: "Fortnightly",
+  MONTHLY: "Monthly",
+};
+
+export const accountTypeLabels: Record<AccountType, string> = {
+  PREPAY: "Prepay",
+  CREDIT: "Credit",
+};
+
 // Convenience arrays for building <select> options.
 export const vehicleTypes = Object.keys(vehicleTypeLabels) as VehicleType[];
 export const jobStatuses = Object.keys(jobStatusLabels) as JobStatus[];
@@ -174,3 +188,5 @@ export const timeBands = Object.keys(timeBandLabels) as TimeBand[];
 export const rateCardKinds = Object.keys(rateCardKindLabels) as RateCardKind[];
 export const serviceLevels = Object.keys(serviceLevelLabels) as ServiceLevel[];
 export const invoiceStatuses = Object.keys(invoiceStatusLabels) as InvoiceStatus[];
+export const invoiceSchedules = Object.keys(invoiceScheduleLabels) as InvoiceSchedule[];
+export const accountTypes = Object.keys(accountTypeLabels) as AccountType[];

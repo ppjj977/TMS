@@ -19,7 +19,13 @@ import {
   LinkButton,
   PageHeader,
 } from "@/components/ui";
-import { formatDate, money, vehicleTypeLabels } from "@/lib/format";
+import {
+  accountTypeLabels,
+  formatDate,
+  invoiceScheduleLabels,
+  money,
+  vehicleTypeLabels,
+} from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -217,6 +223,10 @@ export default async function CustomerDetailPage({
                   .filter(Boolean)
                   .join(", ")}
               />
+              <Info label="Account type" value={accountTypeLabels[customer.accountType]} />
+              <Info label="Invoicing" value={invoiceScheduleLabels[customer.invoiceSchedule]} />
+              <Info label="SLA group" value={customer.slaGroup} />
+              <Info label="Category" value={customer.category} />
             </dl>
             {customer.notes && (
               <p className="mt-3 rounded-md bg-gray-50 p-3 text-sm text-gray-600">{customer.notes}</p>

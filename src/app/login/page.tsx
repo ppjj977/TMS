@@ -1,6 +1,7 @@
 import { login } from "@/actions/auth";
 import { getCurrentUser, homePathFor } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { LogoMark } from "@/components/logo";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +27,8 @@ export default async function LoginPage({
           }}
         />
         <div className="relative flex items-center gap-2.5">
-          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-base font-bold shadow-lg">
-            T
-          </span>
-          <span className="text-xl font-semibold tracking-tight">TMS</span>
+          <LogoMark size={40} className="rounded-xl" />
+          <span className="text-xl font-semibold tracking-tight">Trakr</span>
         </div>
         <div className="relative">
           <h2 className="text-3xl font-semibold leading-tight tracking-tight">
@@ -65,10 +64,8 @@ export default async function LoginPage({
       <div className="flex w-full items-center justify-center px-4 lg:w-1/2">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-base font-bold text-white">
-              T
-            </span>
-            <span className="text-xl font-semibold tracking-tight text-slate-900">TMS</span>
+            <LogoMark size={40} className="rounded-xl" />
+            <span className="text-xl font-semibold tracking-tight text-slate-900">Trakr</span>
           </div>
 
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Welcome back</h1>

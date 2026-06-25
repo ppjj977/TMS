@@ -1,6 +1,13 @@
 import { Customer } from "@prisma/client";
 import { Button, Card, Field, Input, Select, Textarea } from "@/components/ui";
-import { accountStatuses, accountStatusLabels } from "@/lib/format";
+import {
+  accountStatuses,
+  accountStatusLabels,
+  accountTypes,
+  accountTypeLabels,
+  invoiceSchedules,
+  invoiceScheduleLabels,
+} from "@/lib/format";
 
 export function CustomerForm({
   action,
@@ -51,6 +58,32 @@ export function CustomerForm({
         <div className="mt-4">
           <Field label="Notes">
             <Textarea name="notes" rows={2} defaultValue={customer?.notes ?? ""} />
+          </Field>
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <h2 className="mb-4 text-lg font-semibold text-slate-900">Account settings</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Field label="Account type">
+            <Select
+              name="accountType"
+              defaultValue={customer?.accountType ?? "CREDIT"}
+              options={accountTypes.map((t) => ({ value: t, label: accountTypeLabels[t] }))}
+            />
+          </Field>
+          <Field label="Invoice schedule">
+            <Select
+              name="invoiceSchedule"
+              defaultValue={customer?.invoiceSchedule ?? "ON_COMPLETION"}
+              options={invoiceSchedules.map((s) => ({ value: s, label: invoiceScheduleLabels[s] }))}
+            />
+          </Field>
+          <Field label="SLA group" hint="e.g. Premium, Standard">
+            <Input name="slaGroup" defaultValue={customer?.slaGroup ?? ""} />
+          </Field>
+          <Field label="Category" hint="e.g. Retail, Pharma">
+            <Input name="category" defaultValue={customer?.category ?? ""} />
           </Field>
         </div>
       </Card>

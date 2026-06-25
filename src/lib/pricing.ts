@@ -122,8 +122,11 @@ export async function price(input: PriceInputs): Promise<PriceResult | null> {
   const distRate = bandRate(card, RateBandType.DISTANCE, miles);
   const distanceCharge = round2(miles * (distRate ?? card.ratePerMile));
 
+  // Drops are charged per ADDITIONAL drop: A→B is mileage only; A→B→C adds one
+  // drop charge. So the first delivery is free of a drop charge.
+  const chargeableDrops = Math.max(0, drops - 1);
   const dropRate = bandRate(card, RateBandType.DROP, drops);
-  const dropCharge = dropRate != null ? round2(drops * dropRate) : 0;
+  const dropCharge = dropRate != null ? round2(chargeableDrops * dropRate) : 0;
 
   const pieceRate = bandRate(card, RateBandType.PIECE, pieces);
   const pieceCharge = pieceRate != null ? round2(pieces * pieceRate) : 0;

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { lookupPostcode } from "@/lib/postcode";
-import { AccountStatus } from "@prisma/client";
+import { AccountStatus, AccountType, InvoiceSchedule } from "@prisma/client";
 
 const customerSchema = z.object({
   accountCode: z.string().trim().min(1, "Account code is required"),
@@ -18,6 +18,10 @@ const customerSchema = z.object({
   city: z.string().trim().optional(),
   postcode: z.string().trim().optional(),
   paymentTerms: z.coerce.number().int().min(0).default(30),
+  accountType: z.nativeEnum(AccountType).default(AccountType.CREDIT),
+  invoiceSchedule: z.nativeEnum(InvoiceSchedule).default(InvoiceSchedule.ON_COMPLETION),
+  slaGroup: z.string().trim().optional(),
+  category: z.string().trim().optional(),
   notes: z.string().trim().optional(),
 });
 
@@ -33,6 +37,10 @@ function parse(formData: FormData) {
     city: formData.get("city") || undefined,
     postcode: formData.get("postcode") || undefined,
     paymentTerms: formData.get("paymentTerms") || 30,
+    accountType: formData.get("accountType") || undefined,
+    invoiceSchedule: formData.get("invoiceSchedule") || undefined,
+    slaGroup: formData.get("slaGroup") || undefined,
+    category: formData.get("category") || undefined,
     notes: formData.get("notes") || undefined,
   });
 }

@@ -6,7 +6,12 @@ import { prisma } from "@/lib/prisma";
 import { nextInvoiceNumber } from "@/lib/reference";
 import { logJobEvent } from "@/lib/events";
 import { getCurrentUser } from "@/lib/auth";
+import { getCompanySetting } from "@/lib/company";
 import { InvoiceStatus, JobEventType, JobStatus } from "@prisma/client";
+
+function round2(n: number) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
 
 /**
  * Generate a draft invoice from a customer's completed, not-yet-invoiced jobs.
@@ -26,8 +31,10 @@ export async function generateInvoice(customerId: string) {
     redirect("/invoices?error=nojobs");
   }
 
-  const subtotal = jobs.reduce((sum, j) => sum + j.customerCharge, 0);
-  const total = Math.round(subtotal * 100) / 100;
+  const company = await getCompanySetting();
+  const subtotal = round2(jobs.reduce((sum, j) => sum + j.customerCharge, 0));
+  const vat = round2(subtotal * (company.vatRate / 100));
+  const total = round2(subtotal + vat);
   const number = await nextInvoiceNumber();
   const issueDate = new Date();
   const dueDate = new Date(issueDate);
@@ -40,7 +47,8 @@ export async function generateInvoice(customerId: string) {
       status: InvoiceStatus.DRAFT,
       issueDate,
       dueDate,
-      subtotal: total,
+      subtotal,
+      vat,
       total,
       lines: {
         create: jobs.map((j) => ({

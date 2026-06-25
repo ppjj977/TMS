@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon, IconName } from "./icons";
+import { Logo } from "./logo";
 
 type Item = { href: string; label: string; icon: IconName };
 type Section = { title: string; items: Item[] };
@@ -12,6 +13,7 @@ const sections: Section[] = [
     title: "Operations",
     items: [
       { href: "/", label: "Dashboard", icon: "dashboard" },
+      { href: "/control", label: "Control Room", icon: "control" },
       { href: "/bookings", label: "Bookings", icon: "bookings" },
       { href: "/allocation", label: "Allocation", icon: "allocation" },
     ],
@@ -27,7 +29,10 @@ const sections: Section[] = [
   },
   {
     title: "Finance",
-    items: [{ href: "/invoices", label: "Invoices", icon: "invoices" }],
+    items: [
+      { href: "/invoices", label: "Invoices", icon: "invoices" },
+      { href: "/settings", label: "Company settings", icon: "rates" },
+    ],
   },
 ];
 
@@ -41,14 +46,8 @@ export function Nav() {
 
   return (
     <nav className="flex h-full flex-col gap-6 px-3 py-5">
-      <Link href="/" className="flex items-center gap-2.5 px-2">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-lg shadow-brand-900/40">
-          T
-        </span>
-        <span className="flex flex-col leading-none">
-          <span className="text-[15px] font-semibold tracking-tight text-white">TMS</span>
-          <span className="text-[11px] text-slate-400">Transport Manager</span>
-        </span>
+      <Link href="/" className="px-2">
+        <Logo size={34} light />
       </Link>
 
       <div className="flex flex-1 flex-col gap-5">

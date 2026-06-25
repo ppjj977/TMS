@@ -21,6 +21,8 @@ async function main() {
   console.log("Seeding TMS demo data…");
 
   // Clear existing data (idempotent reseed).
+  await prisma.trafficScreen.deleteMany();
+  await prisma.companySetting.deleteMany();
   await prisma.notificationLog.deleteMany();
   await prisma.jobEvent.deleteMany();
   await prisma.invoiceLine.deleteMany();
@@ -321,6 +323,33 @@ async function main() {
     stops: [
       { type: "COLLECTION", name: "Acme Components Ltd", addressLine1: "Unit 4, Trafford Park", city: "Manchester", postcode: "M17 1AB" },
       { type: "DELIVERY", name: "Stockport Depot", addressLine1: "3 Heaton Lane", city: "Stockport", postcode: "SK4 1AR" },
+    ],
+  });
+
+  // --- Company settings -------------------------------------------------
+  await prisma.companySetting.create({
+    data: {
+      name: "Mission Express Ltd",
+      addressLine1: "Littleton House, Littleton Road",
+      city: "Ashford",
+      postcode: "TW15 1UU",
+      email: "accounts@missionexpress.example",
+      phone: "020 8917 1299",
+      vatNumber: "GB720417765",
+      vatRate: 20,
+      companyReg: "3672615",
+      bankName: "NatWest Bank PLC",
+      sortCode: "60-08-46",
+      accountNumber: "76777162",
+    },
+  });
+
+  // --- Control Room saved views ----------------------------------------
+  await prisma.trafficScreen.createMany({
+    data: [
+      { name: "Unallocated", orderIndex: 1, statuses: ["BOOKED"], serviceLevels: [], vehicleType: null },
+      { name: "On the road", orderIndex: 2, statuses: ["ALLOCATED", "ON_ROUTE"], serviceLevels: [], vehicleType: null },
+      { name: "To invoice", orderIndex: 3, statuses: ["COMPLETED"], serviceLevels: [], vehicleType: null },
     ],
   });
 

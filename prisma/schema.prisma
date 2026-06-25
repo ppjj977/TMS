@@ -138,6 +138,18 @@ enum NotificationStatus {
   FAILED
 }
 
+enum InvoiceSchedule {
+  ON_COMPLETION
+  WEEKLY
+  FORTNIGHTLY
+  MONTHLY
+}
+
+enum AccountType {
+  PREPAY
+  CREDIT
+}
+
 // ---------------------------------------------------------------------------
 // Customers & contacts
 // ---------------------------------------------------------------------------
@@ -155,6 +167,12 @@ model Customer {
   postcode     String?
   paymentTerms Int           @default(30) // days
   notes        String?
+
+  // Account configuration
+  invoiceSchedule InvoiceSchedule @default(ON_COMPLETION)
+  accountType     AccountType     @default(CREDIT)
+  slaGroup        String?
+  category        String?
 
   contacts       Contact[]
   jobs           Job[]
@@ -470,6 +488,7 @@ model Invoice {
   issueDate DateTime @default(now())
   dueDate   DateTime
   subtotal  Float    @default(0)
+  vat       Float    @default(0)
   total     Float    @default(0)
   notes     String?
 
@@ -512,4 +531,44 @@ model NotificationLog {
   createdAt DateTime           @default(now())
 
   @@index([jobId])
+}
+
+// ---------------------------------------------------------------------------
+// Company settings (singleton) — your own billing identity, used on invoices.
+// ---------------------------------------------------------------------------
+
+model CompanySetting {
+  id           String  @id @default(cuid())
+  name         String  @default("Your Company Ltd")
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  postcode     String?
+  email        String?
+  phone        String?
+  vatNumber    String?
+  vatRate      Float   @default(20) // %
+  companyReg   String?
+  bankName     String?
+  sortCode     String?
+  accountNumber String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Control Room saved views ("traffic screens").
+// ---------------------------------------------------------------------------
+
+model TrafficScreen {
+  id            String         @id @default(cuid())
+  name          String
+  orderIndex    Int            @default(0)
+  statuses      JobStatus[] // jobs in any of these statuses are shown
+  serviceLevels ServiceLevel[] // empty = any
+  vehicleType   VehicleType? // null = any
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { logout } from "@/actions/auth";
 import { SessionUser } from "@/lib/auth";
 import { Icon } from "./icons";
+import { LogoMark } from "./logo";
 
 const roleLabels: Record<string, string> = {
   ADMIN: "Administrator",
@@ -22,7 +23,7 @@ function initials(name: string) {
 export function Topbar({ user }: { user: SessionUser }) {
   return (
     <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-slate-200 bg-white/80 px-4 py-3 backdrop-blur sm:px-6">
-      <div className="md:hidden text-base font-semibold text-brand-700">TMS</div>
+      <div className="md:hidden"><LogoMark size={30} className="rounded-lg" /></div>
 
       <Link
         href="/bookings/new"
