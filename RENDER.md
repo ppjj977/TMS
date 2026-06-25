@@ -26,17 +26,16 @@ Render then:
 The first deploy takes a few minutes. When it's live you'll get a URL like
 `https://tms.onrender.com`.
 
-## 2. Load demo data (one time)
+## 2. Demo data (automatic)
 
-The database starts empty. To add the demo customers, drivers, rate cards and
-logins, open the web service in Render and use **Shell** (left sidebar), then:
+The build runs `db:seed`, which **only populates an empty database** — on first
+deploy it loads the demo customers, drivers, rate cards and logins, and on every
+deploy after that it's a no-op (it detects existing data and skips).
 
-```bash
-npm run db:seed
-```
-
-> ⚠️ `db:seed` **wipes and reloads** demo data — only run it on an empty/demo
-> database, never once you have real bookings.
+- To force a wipe-and-reseed, set `FORCE_SEED=true` on the service and redeploy
+  (then remove it).
+- Render's **Shell** is a paid feature, so this app seeds itself in the build
+  instead of needing shell access.
 
 ## 3. Sign in
 

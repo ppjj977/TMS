@@ -6,6 +6,18 @@ import { hashPassword } from "../src/lib/password";
 const prisma = new PrismaClient();
 
 async function main() {
+  // Safety guard: never wipe a database that already has data unless explicitly
+  // forced. This makes it safe to run the seed on every deploy — it only
+  // populates an empty database, and is a no-op once real data exists.
+  const existingUsers = await prisma.user.count();
+  if (existingUsers > 0 && process.env.FORCE_SEED !== "true") {
+    console.log(
+      `Seed skipped: ${existingUsers} user(s) already exist. ` +
+        `Set FORCE_SEED=true to wipe and reseed demo data.`,
+    );
+    return;
+  }
+
   console.log("Seeding TMS demo data…");
 
   // Clear existing data (idempotent reseed).

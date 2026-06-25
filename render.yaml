@@ -8,9 +8,11 @@ services:
     runtime: node
     plan: free
     region: frankfurt # change to your nearest region (e.g. oregon, ohio, singapore)
-    # Build also generates the Prisma client and applies DB migrations. The
-    # DATABASE_URL below is available at build time because the DB is linked.
-    buildCommand: npm install && npx prisma migrate deploy && npm run build
+    # Build generates the Prisma client, applies DB migrations, and seeds demo
+    # data on first deploy only (the seed is a no-op once users exist — set
+    # FORCE_SEED=true to wipe & reseed). DATABASE_URL is available at build time
+    # because the DB is linked below.
+    buildCommand: npm install && npx prisma migrate deploy && npm run db:seed && npm run build
     startCommand: npm run start
     healthCheckPath: /login
     envVars:
