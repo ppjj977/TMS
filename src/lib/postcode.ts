@@ -48,6 +48,53 @@ export async function lookupPostcode(postcode: string): Promise<GeoResult | null
   }
 }
 
+// ---------------------------------------------------------------------------
+// Street-level address lookup (optional provider)
+// ---------------------------------------------------------------------------
+//
+// postcodes.io only resolves a postcode to its town/area + coordinates. To list
+// individual street addresses you need a PAF-backed provider. We support
+// getAddress.io when GETADDRESS_API_KEY is set; otherwise this returns an empty
+// list and the app falls back to town-level lookup + manual entry.
+
+export interface AddressResult {
+  line1: string;
+  line2: string | null;
+  city: string | null;
+  postcode: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export async function lookupAddresses(postcode: string): Promise<AddressResult[]> {
+  const key = process.env.GETADDRESS_API_KEY;
+  const pc = normalise(postcode);
+  if (!key || !pc) return [];
+  try {
+    const res = await fetch(
+      `https://api.getaddress.io/find/${encodeURIComponent(pc)}?api-key=${encodeURIComponent(key)}&expand=true`,
+      { next: { revalidate: 86400 } },
+    );
+    if (!res.ok) return [];
+    const json = (await res.json()) as { latitude?: number; longitude?: number; addresses?: any[] };
+    const lat = json.latitude ?? null;
+    const lng = json.longitude ?? null;
+    return (json.addresses ?? []).map((a) => {
+      const fa: string[] = Array.isArray(a.formatted_address) ? a.formatted_address : [];
+      return {
+        line1: a.line_1 || fa[0] || "",
+        line2: a.line_2 || fa[1] || null,
+        city: a.town_or_city || null,
+        postcode: pc,
+        latitude: lat,
+        longitude: lng,
+      } as AddressResult;
+    });
+  } catch {
+    return [];
+  }
+}
+
 interface Point {
   latitude: number;
   longitude: number;

@@ -71,6 +71,57 @@ export interface Itinerary {
   anyInfeasible: boolean;
 }
 
+export interface DayStop {
+  jobId: string;
+  type: "COLLECTION" | "DELIVERY";
+  lat: number | null;
+  lng: number | null;
+  order?: number; // tie-break for the starting stop (e.g. service time)
+}
+
+/**
+ * Order a driver's whole-day stops with a constrained nearest-neighbour: a
+ * job's collection must be visited before its deliveries. Stops without
+ * coordinates are appended (in input order) at the end.
+ */
+export function optimiseDayOrder<T extends DayStop>(stops: T[]): T[] {
+  const located = stops.filter((s) => s.lat != null && s.lng != null);
+  const rest = stops.filter((s) => s.lat == null || s.lng == null);
+  if (located.length <= 1) return [...located, ...rest];
+
+  const dist = (a: T, b: T) =>
+    haversineMiles(
+      { latitude: a.lat as number, longitude: a.lng as number },
+      { latitude: b.lat as number, longitude: b.lng as number },
+    );
+
+  const pool = [...located];
+  const visitedCollection = new Set<string>();
+  const result: T[] = [];
+  let current: T | null = null;
+
+  while (pool.length) {
+    let eligible = pool.filter((s) => s.type === "COLLECTION" || visitedCollection.has(s.jobId));
+    if (eligible.length === 0) eligible = pool; // safety: deliveries with no collection in set
+
+    let next: T;
+    if (current === null) {
+      // Start from the earliest-ordered eligible collection.
+      next = [...eligible].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))[0];
+    } else {
+      const cur = current;
+      next = eligible.reduce((best, s) => (dist(cur, s) < dist(cur, best) ? s : best), eligible[0]);
+    }
+
+    result.push(next);
+    pool.splice(pool.indexOf(next), 1);
+    if (next.type === "COLLECTION") visitedCollection.add(next.jobId);
+    current = next;
+  }
+
+  return [...result, ...rest];
+}
+
 export function computeItinerary(
   points: RoutePoint[],
   start: Date | null,

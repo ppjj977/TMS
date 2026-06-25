@@ -66,13 +66,21 @@ export default async function RunsPage({
                 <div className="mt-2 text-sm text-slate-600">
                   {d.jobs.length} jobs · {stops} stops · {miles(mi)}
                 </div>
-                <Link
-                  href={`/run/${d.id}?date=${dateStr}`}
-                  target="_blank"
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-                >
-                  <Icon name="invoices" size={14} /> Open run sheet
-                </Link>
+                <div className="mt-3 flex gap-2">
+                  <Link
+                    href={`/run/${d.id}?date=${dateStr}`}
+                    target="_blank"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+                  >
+                    <Icon name="invoices" size={14} /> Run sheet
+                  </Link>
+                  <Link
+                    href={`/day/${d.id}?date=${dateStr}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+                  >
+                    <Icon name="route" size={14} /> Day plan
+                  </Link>
+                </div>
               </Card>
             );
           })}

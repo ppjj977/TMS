@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createBooking } from "@/actions/bookings";
-import { lookupPostcodeAction } from "@/actions/postcode";
+import { lookupPostcodeFull } from "@/actions/postcode";
 import { Badge, Button, Card, Field, Input, Select, Textarea } from "@/components/ui";
 import {
   serviceLevels,
@@ -52,6 +52,14 @@ interface StopRow {
   lat: number | null;
   lng: number | null;
   geo: "idle" | "loading" | "ok" | "fail";
+  addressOptions: {
+    line1: string;
+    line2: string | null;
+    city: string | null;
+    postcode: string;
+    latitude: number | null;
+    longitude: number | null;
+  }[];
 }
 
 let stopKey = 0;
@@ -72,6 +80,7 @@ function newStop(type = "DELIVERY"): StopRow {
     lat: null,
     lng: null,
     geo: "idle",
+    addressOptions: [],
   };
 }
 
@@ -154,18 +163,20 @@ export function BookingForm({
   async function geocode(key: number, postcode: string) {
     if (postcode.trim().length < 4) return;
     patch(key, { geo: "loading" });
-    const r = await lookupPostcodeAction(postcode);
-    if (r) {
+    const r = await lookupPostcodeFull(postcode);
+    if (r.geo) {
       patch(key, {
         geo: "ok",
-        postcode: r.postcode,
-        lat: r.latitude,
-        lng: r.longitude,
+        postcode: r.geo.postcode,
+        lat: r.geo.latitude,
+        lng: r.geo.longitude,
+        addressOptions: r.addresses,
       });
-      // fill town if empty
-      setStops((s) => s.map((row) => (row.key === key && !row.city ? { ...row, city: r.town ?? "" } : row)));
+      setStops((s) => s.map((row) => (row.key === key && !row.city ? { ...row, city: r.geo!.town ?? "" } : row)));
+    } else if (r.addresses.length) {
+      patch(key, { geo: "ok", addressOptions: r.addresses });
     } else {
-      patch(key, { geo: "fail", lat: null, lng: null });
+      patch(key, { geo: "fail", lat: null, lng: null, addressOptions: [] });
     }
   }
 
@@ -473,6 +484,36 @@ function StopFields({
               defaultValue=""
               onChange={(e) => onApplySaved(e.target.value)}
               options={[{ value: "", label: "— pick from address book —" }, ...addresses.map((a) => ({ value: a.id, label: a.label }))]}
+            />
+          </Field>
+        </div>
+      )}
+
+      {stop.addressOptions.length > 0 && (
+        <div className="mb-3">
+          <Field label="Select address" hint="From postcode lookup">
+            <Select
+              defaultValue=""
+              onChange={(e) => {
+                const a = stop.addressOptions[Number(e.target.value)];
+                if (a)
+                  onPatch({
+                    addressLine1: a.line1,
+                    addressLine2: a.line2 ?? "",
+                    city: a.city ?? "",
+                    postcode: a.postcode,
+                    lat: a.latitude,
+                    lng: a.longitude,
+                    geo: "ok",
+                  });
+              }}
+              options={[
+                { value: "", label: `${stop.addressOptions.length} addresses found…` },
+                ...stop.addressOptions.map((a, i) => ({
+                  value: String(i),
+                  label: [a.line1, a.city].filter(Boolean).join(", "),
+                })),
+              ]}
             />
           </Field>
         </div>
